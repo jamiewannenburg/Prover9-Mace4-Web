@@ -338,7 +338,6 @@ async def get_status(process_id: int) -> ProcessInfo:
 async def list_processes() -> List[int]:
     """List all tracked processes"""
     with process_lock:
-        print(list(processes.keys()))
         return list(processes.keys())
 
 @app.post("/kill/{process_id}")

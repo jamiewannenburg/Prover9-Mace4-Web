@@ -895,7 +895,6 @@ def run_prover9():
     
     # Generate input
     input_text = generate_input()
-    print(input_text)
     start_process('prover9', input_text)
 
 def run_mace4():
@@ -903,7 +902,6 @@ def run_mace4():
     
     # Generate input
     input_text = generate_input()
-    print(input_text)
     start_process('mace4', input_text)
 
 # Run the app
