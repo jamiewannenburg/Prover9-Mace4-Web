@@ -7,10 +7,13 @@ A modern browser-based user interface for Prover9 and Mace4 based on PyWebIO.
 - Browser-based interface (works on desktop, tablet, and mobile)
 - Modern, responsive design
 - Easy to deploy via Docker
-- Preserves all the functionality of the original wxPython GUI
+- Can start long running processes on a server
+- Preserves most of the functionality of the original wxPython GUI
 - Syntax highlighting for input and output
 
 ## Installation and Usage
+
+First download binaries from https://github.com/jamiewannenburg/ladr/releases or https://github.com/laitep/ladr/releases into the `bin` directory (docker should do this).
 
 ### Option 1: Run with Python directly
 
@@ -19,8 +22,9 @@ A modern browser-based user interface for Prover9 and Mace4 based on PyWebIO.
    pip install -r requirements.txt
    ```
 
-2. Run the application:
+2. Run the api server and application:
    ```
+   python api_server.py
    python web_app.py
    ```
 
@@ -90,4 +94,6 @@ This project is licensed under the GNU General Public License v2.0.
 ## Credits
 
 - Original Prover9-Mace4 by William McCune
+- Help from Cursor IDE
 - Web UI implementation using PyWebIO 
+- See the browser-gui branch of https://github.com/jamiewannenburg/Prover9-Mace4-v05
