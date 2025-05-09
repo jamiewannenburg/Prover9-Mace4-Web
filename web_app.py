@@ -51,13 +51,13 @@ PROVER9_FORMATS = [
 
 # TODO: is this not interpformat options?
 MACE4_FORMATS = [
+    {'label': 'Standard', 'value': 'standard'},
+    {'label': 'Portable', 'value': 'portable'},
     {'label': 'Text', 'value': 'text'},
     {'label': 'XML', 'value': 'xml'},
-    {'label': 'Portable', 'value': 'portable'},
     {'label': 'Tabular', 'value': 'tabular'},
     {'label': 'Raw', 'value': 'raw'},
     {'label': 'Cooked', 'value': 'cooked'},
-    {'label': 'Standard', 'value': 'standard'}
 ]
 
 
