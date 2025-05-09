@@ -350,16 +350,30 @@ async def kill_process(process_id: int) -> Dict:
         process_info = processes[process_id]
         if process_info.state not in [ProcessState.RUNNING, ProcessState.SUSPENDED]:
             raise HTTPException(status_code=400, detail="Process is not running or suspended")
-
-        # Update state
-        process_info.state = ProcessState.KILLED
-
-        # Send termination signal
+        
         try:
-            os.kill(process_info.pid, signal.SIGTERM)
-            return {"status": "success", "message": "Process termination signal sent"}
+            os.kill(process_id, signal.SIGKILL)
+            process_info.state = ProcessState.KILLED
+            return {"status": "success", "message": f"Process {process_id} killed"}
         except ProcessLookupError:
-            return {"status": "error", "message": "Process not found"}
+            process_info.state = ProcessState.ERROR
+            return {"status": "error", "message": f"Process {process_id} not found"}
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="Permission denied")
+
+@app.delete("/process/{process_id}")
+async def remove_process(process_id: int) -> Dict:
+    """Remove a completed process from the list"""
+    with process_lock:
+        if process_id not in processes:
+            raise HTTPException(status_code=404, detail="Process not found")
+        
+        process_info = processes[process_id]
+        if process_info.state not in [ProcessState.DONE, ProcessState.ERROR, ProcessState.KILLED]:
+            raise HTTPException(status_code=400, detail="Can only remove completed, errored, or killed processes")
+        
+        del processes[process_id]
+        return {"status": "success", "message": f"Process {process_id} removed"}
 
 @app.post("/pause/{process_id}")
 async def pause_process(process_id: int) -> Dict:

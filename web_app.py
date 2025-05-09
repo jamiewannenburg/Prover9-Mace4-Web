@@ -478,6 +478,42 @@ def run_panel():
         ],size="80px 20px 100px 60px 20px")
         
 
+def filter_models(process_id: int) -> None:
+    """Send output to isofilter/isofilter2"""
+    try:
+        # Get the process output
+        response = requests.get(f"{get_api_url()}/status/{process_id}")
+        if response.status_code == 200:
+            process = response.json()
+            if process['output']:
+                # Show filter selection dialog
+                filter_choice = select('Choose filter program', options=[
+                    {'label': 'Isofilter', 'value': 'isofilter'},
+                    {'label': 'Isofilter2 (Canonical Forms)', 'value': 'isofilter2'}
+                ])
+                if filter_choice:
+                    # Start isofilter process
+                    start_process(filter_choice, process['output'])
+                    toast(f"Started {filter_choice} process", color='success')
+            else:
+                toast("No output available", color='warn')
+        else:
+            toast(f"Error getting process status: {response.text}", color='error')
+    except requests.exceptions.RequestException as e:
+        toast(f"Error filtering models: {str(e)}", color='error')
+
+def remove_process(process_id: int) -> None:
+    """Remove a completed process from the list"""
+    try:
+        response = requests.delete(f"{get_api_url()}/process/{process_id}")
+        if response.status_code == 200:
+            toast("Process removed successfully", color='success')
+            update_process_list()
+        else:
+            toast(f"Error removing process: {response.json()['detail']}", color='danger')
+    except Exception as e:
+        toast(f"Error removing process: {str(e)}", color='danger')
+
 def update_process_list() -> None:
     """Update the process list display"""
     try:
@@ -485,43 +521,59 @@ def update_process_list() -> None:
         
         response = requests.get(f"{get_api_url()}/processes")
         process_ids = response.json()
-        processes = []
         table = [
-            ['ID', 'Program', 'Status', 'Start Time', 'Actions']
+            ['ID', 'Remove', 'Program', 'Status', 'Start Time', 'Actions']
         ]
         for process_id in process_ids:
             process = requests.get(f"{get_api_url()}/status/{process_id}").json()
-            processes.append(process)
-            for process in processes:
-                start_time = datetime.fromisoformat(process['start_time'])
-                actions = []
-                clicks = []
-                if process['state'] in ['running', 'suspended']:
-                    if process['state'] == 'running':
-                        # windows cannot pause a process
-                        if os.name != 'nt':
-                            actions.append({'label': 'Pause', 'value': str(process_id)+'pause', 'color': 'primary'})
-                            clicks.append(lambda p=process_id: pause_process(p))
-                    else:
-                        # windows cannot resume a process
-                        if os.name != 'nt':
-                            actions.append({'label': 'Resume', 'value': str(process_id)+'resume', 'color': 'primary'})
-                            clicks.append(lambda p=process_id: resume_process(p))
-                    actions.append({'label': 'Kill', 'value': str(process_id)+'kill', 'color': 'danger'})
-                    clicks.append(lambda p=process_id: kill_process(p))
-                
-                if process['state'] == 'done' and process['output']:
-                    actions.append({'label': '📥', 'value': str(process_id)+'download', 'color': 'primary'})
-                    clicks.append(lambda p=process_id: download_output(p))
-                
-                table.append([
-                        put_button(label=str(process_id),onclick=lambda p=process_id: show_process_details(p), color='primary'),
-                        process['program'],
-                        process['state'],
-                        start_time.strftime('%Y-%m-%d %H:%M:%S'),
-                        put_buttons(actions, onclick=clicks)
-                    ])
+            start_time = datetime.fromisoformat(process['start_time'])
+            actions = []
+            clicks = []
+            if process['state'] in ['running', 'suspended']:
+                if process['state'] == 'running':
+                    # windows cannot pause a process
+                    if os.name != 'nt':
+                        actions.append({'label': 'Pause', 'value': str(process_id)+'pause', 'color': 'primary'})
+                        clicks.append(lambda p=process_id: pause_process(p))
+                else:
+                    # windows cannot resume a process
+                    if os.name != 'nt':
+                        actions.append({'label': 'Resume', 'value': str(process_id)+'resume', 'color': 'primary'})
+                        clicks.append(lambda p=process_id: resume_process(p))
+                actions.append({'label': 'Kill', 'value': str(process_id)+'kill', 'color': 'danger'})
+                clicks.append(lambda p=process_id: kill_process(p))
+            
+            if process['state'] == 'done' and process['output']:
+                actions.append({'label': '📥', 'value': str(process_id)+'download', 'color': 'primary'})
+                clicks.append(lambda p=process_id: download_output(p))
+                # Add format button for completed Mace4 processes
+                if process['program'] == 'mace4':
+                    actions.append({'label': '🔄', 'value': str(process_id)+'format', 'color': 'primary'})
+                    clicks.append(lambda p=process_id: format_mace4_output(p))
+                # Add filter button for completed interpformat processes
+                elif process['program'] == 'interpformat':
+                    actions.append({'label': '🔄', 'value': str(process_id)+'format', 'color': 'primary'})
+                    clicks.append(lambda p=process_id: format_mace4_output(p))
+                    actions.append({'label': '🔍', 'value': str(process_id)+'filter', 'color': 'primary'})
+                    clicks.append(lambda p=process_id: filter_models(p))
+                elif process['program'] == 'isofilter':
+                    actions.append({'label': '🔄', 'value': str(process_id)+'format', 'color': 'primary'})
+                    clicks.append(lambda p=process_id: format_mace4_output(p))
+                elif process['program'] == 'isofilter2':    
+                    actions.append({'label': '🔄', 'value': str(process_id)+'format', 'color': 'primary'})
+                    clicks.append(lambda p=process_id: format_mace4_output(p))
+            
+            table.append([
+                    put_button(label=str(process_id),onclick=lambda p=process_id: show_process_details(p), color='primary'),
+                    put_button(label='❌',onclick=lambda p=process_id: remove_process(p), color='danger'),
+                    process['program'],
+                    process['state'],
+                    start_time.strftime('%Y-%m-%d %H:%M:%S'),
+                    put_buttons(actions, onclick=clicks)
+                ])
         with use_scope('process_list', clear=True):
+            put_text('❌ Remove, 📥 Download, 🔄 Format, 🔍 IsoFilter')
+            put_text('First format mace4 output before filtering')
             put_table(table)
             
     except requests.exceptions.RequestException as e:
@@ -889,6 +941,26 @@ def download_output(process_id: int) -> None:
     except requests.exceptions.RequestException as e:
         toast(f"Error downloading output: {str(e)}", color='error')
 
+def format_mace4_output(process_id: int) -> None:
+    """Format Mace4 output using interpformat"""
+    try:
+        # Get the process output
+        response = requests.get(f"{get_api_url()}/status/{process_id}")
+        if response.status_code == 200:
+            process = response.json()
+            if process['output']:
+                # Show format selection dialog
+                format_choice = select('Choose output format', options=MACE4_FORMATS)
+                if format_choice:
+                    # Start interpformat process
+                    start_process('interpformat', process['output'], {'format': format_choice})
+                    toast("Started interpformat process", color='success')
+            else:
+                toast("No output available", color='warn')
+        else:
+            toast(f"Error getting process status: {response.text}", color='error')
+    except requests.exceptions.RequestException as e:
+        toast(f"Error formatting output: {str(e)}", color='error')
 
 def run_prover9():
     """Run Prover9"""
