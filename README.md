@@ -46,6 +46,15 @@ First download binaries from https://github.com/jamiewannenburg/ladr/releases or
    docker compose up -d
    ```
 
+For API only
+   ```
+   docker compose up api-only
+   ```
+For GUI only
+   ```
+   docker compose up web
+   ```
+
 2. Open your browser and go to http://localhost:8080
 
 ### Option 3: Build using Docker Buildx CLI directly
