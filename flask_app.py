@@ -23,7 +23,7 @@ app.add_url_rule('/', 'webio_view', webio_view(prover9_mace4_app), methods=['GET
 @app.route('/favicon.ico')
 def favicon():
     return send_from_directory(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src', 'Images'),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Images'),
         'p9.ico', 
         mimetype='image/png'
     )

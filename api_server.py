@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from enum import Enum
 
 # Constants
-BIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src', 'bin')
+BIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin')
 
 # Process tracking
 class ProcessState(Enum):

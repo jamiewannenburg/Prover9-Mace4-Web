@@ -32,7 +32,7 @@ from pywebio import config, start_server
 from pywebio.platform.flask import webio_view
 
 # Constants
-SAMPLE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src', 'Samples')
+SAMPLE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Samples')
 PROGRAM_NAME = 'Prover9-Mace4'
 PROGRAM_VERSION = '0.5 Web'
 PROGRAM_DATE = 'May 2025'
@@ -469,10 +469,10 @@ def run_panel():
     """Run panel with controls and output display"""
     with use_scope('run_panel'):
         put_row([
-            put_image(Image.open('src/Images/prover9-5a-128t.gif'), format='gif', title=BANNER ,height='30px'),
+            put_image(Image.open('Images/prover9-5a-128t.gif'), format='gif', title=BANNER ,height='30px'),
             put_button("▶️", onclick=run_prover9, color='primary'),
             None,
-            put_image(Image.open('src/Images/mace4-90t.gif'), format='gif', title=BANNER ,height='30px'),
+            put_image(Image.open('Images/mace4-90t.gif'), format='gif', title=BANNER ,height='30px'),
             put_button("▶️", onclick=run_mace4, color='primary'),
 
         ],size="80px 20px 100px 60px 20px")
