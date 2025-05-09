@@ -1,0 +1,11 @@
+src/__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+src/venv/
+src/bin/
+venv/
+.env
+*.code-workspace
