@@ -31,6 +31,10 @@ First download binaries from https://github.com/jamiewannenburg/ladr/releases or
 
 ### Option 2: Run with Docker
 
+Get the image at https://docker.io/jamiewannenburg/prover9-mace4-web
+
+Or build locally:
+
 1. Build and start the container using Docker Buildx (recommended method):
    ```
    # Enable BuildKit by default (only needed once)
