@@ -11,10 +11,10 @@ WORKDIR /app
 
 # Download and install LADR binaries
 RUN mkdir -p /app/bin && \
-    wget https://github.com/jamiewannenburg/ladr/releases/latest/download/ladr-linux.tar.gz -O ladr.zip && \
-    unzip ladr.zip -d /app/bin && \
+    wget https://github.com/jamiewannenburg/ladr/releases/latest/download/ladr-linux.tar.gz -O ladr.tar.gz && \
+    tar -xzf ladr.tar.gz -C /app/bin && \
     chmod +x /app/bin/* && \
-    rm ladr.zip
+    rm ladr.tar.gz
 
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN useradd -m -u 1000 appuser
+RUN useradd -m -u 568 apps
 
 # Set working directory
 WORKDIR /app

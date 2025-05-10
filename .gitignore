@@ -8,3 +8,4 @@ bin/
 venv/
 .env
 *.code-workspace
+.pytest_cache/
