@@ -36,8 +36,8 @@ elif command -v python3 &> /dev/null; then
     fi
     
     # Run the app
-    echo "Starting the app with Flask..."
-    python flask_app.py --production
+    echo "Starting the app..."
+    python api_server.py
     
 else
     echo "Error: Neither Docker nor Python 3 is available."

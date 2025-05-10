@@ -14,13 +14,6 @@ venv/
 
 # Editor directories
 .vscode/
-.idea/
-
-# Local saved data
-saved/
 
 # Documentation
 README*
-docs/
-imgs/
-LICENSE 

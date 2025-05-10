@@ -22,10 +22,9 @@ First download binaries from https://github.com/jamiewannenburg/ladr/releases or
    pip install -r requirements.txt
    ```
 
-2. Run the api server and application:
+2. Run the api server:
    ```
    python api_server.py
-   python web_app.py
    ```
 
 3. Open your browser and go to http://localhost:8080
@@ -46,16 +45,7 @@ First download binaries from https://github.com/jamiewannenburg/ladr/releases or
    docker compose up -d
    ```
 
-For API only
-   ```
-   docker compose up api-only
-   ```
-For GUI only
-   ```
-   docker compose up web
-   ```
-
-2. Open your browser and go to http://localhost:8080
+2. Open your browser and go to http://localhost:8080/web
 
 ### Option 3: Build using Docker Buildx CLI directly
 
@@ -69,7 +59,7 @@ docker buildx create --name mybuilder --use
 docker buildx build -t prover9-mace4-web .
 
 # Run the container
-docker run -p 8080:8080 -d prover9-mace4-web
+docker run -p 8000:8000 -d prover9-mace4-web
 ```
 
 This method allows multi-platform builds and other advanced features.
@@ -106,3 +96,71 @@ This project is licensed under the GNU General Public License v2.0.
 - Help from Cursor IDE
 - Web UI implementation using PyWebIO 
 - See the browser-gui branch of https://github.com/jamiewannenburg/Prover9-Mace4-v05
+
+## API Documentation
+
+The Prover9-Mace4 Web UI provides a REST API for programmatic access to its functionality. The API runs on port 8000 by default.
+
+### Endpoints
+
+#### Start a Process
+```http
+POST /start
+Content-Type: application/json
+
+{
+    "program": "prover9|mace4|interpformat|isofilter|prooftrans",
+    "input": "string",
+    "options": {
+        // Optional program-specific options
+    }
+}
+```
+
+#### Check Process Status
+```http
+GET /status/{process_id}
+```
+
+#### List All Processes
+```http
+GET /processes
+```
+
+#### Control Process
+```http
+POST /pause/{process_id}
+POST /resume/{process_id}
+POST /kill/{process_id}
+```
+
+### Example Usage
+
+Here's a Python example showing how to use the API:
+
+```python
+import requests
+
+# Start a Prover9 process
+response = requests.post("http://localhost:8000/start", json={
+    "program": "prover9",
+    "input": "formulas(assumptions).\nall x (P(x) -> Q(x)).\nP(a).\nend_of_list.\n\nformulas(goals).\nQ(a).\nend_of_list."
+})
+process_id = response.json()["process_id"]
+
+# Check status
+status = requests.get(f"http://localhost:8000/status/{process_id}").json()
+
+# Control the process
+requests.post(f"http://localhost:8000/pause/{process_id}")
+requests.post(f"http://localhost:8000/resume/{process_id}")
+requests.post(f"http://localhost:8000/kill/{process_id}")
+```
+
+### Testing
+
+Unit tests for the API are available in `test_api.py`. To run the tests:
+
+```bash
+python -m unittest test_api.py
+```

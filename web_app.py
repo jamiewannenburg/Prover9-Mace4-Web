@@ -28,8 +28,7 @@ from pywebio.output import *
 from pywebio.pin import *
 from pywebio.session import *
 from pywebio.session import get_info
-from pywebio import config, start_server
-from pywebio.platform.flask import webio_view
+from pywebio import config
 
 # Constants
 SAMPLE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Samples')
@@ -297,7 +296,7 @@ def prover9_mace4_app():
             put_scope('process_details'),
         ],size="60% 40%"),
         put_scope('api_config'),
-    ], size="30px") #, size="5% 60% 37% 2%"
+    ], size="30px")
     
     # init api url
     dotenv.load_dotenv() # load environment variables from .env file
@@ -314,13 +313,12 @@ def prover9_mace4_app():
     run_panel()
     setup_panel()
     
-    # Set favicon using JavaScript - only when running under Flask
-    if info.backend == 'flask':
-        image_url = "/favicon.ico"
-        run_js("""
-        $('#favicon32,#favicon16').remove(); 
-        $('head').append('<link rel="icon" type="image/png" href="%s">')
-        """ % image_url)
+    # Set favicon using JavaScript
+    image_url = "Images/p9.ico"
+    run_js("""
+    $('#favicon32,#favicon16').remove(); 
+    $('head').append('<link rel="icon" type="image/png" href="%s">')
+    """ % image_url)
 
     
     # Initial update
@@ -330,8 +328,6 @@ def prover9_mace4_app():
     while True:
         time.sleep(3)
         update_process_list()
-
-    
 
 def setup_panel():
     """Setup panel with formula input and options"""

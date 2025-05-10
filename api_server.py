@@ -16,8 +16,11 @@ import psutil
 from typing import Dict, List, Optional, Union
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from enum import Enum
+from pywebio.platform.fastapi import webio_routes
+from web_app import prover9_mace4_app
 
 # Constants
 BIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin')
@@ -296,6 +299,18 @@ def run_program(program: ProgramType, input_text: str, process_id: int, options:
 # FastAPI app
 app = FastAPI(title="Prover9-Mace4 API")
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Add PyWebIO routes
+app.mount("/web", FastAPI(routes=webio_routes(prover9_mace4_app)))
+
 class ProgramInput(BaseModel):
     program: ProgramType
     input: str
@@ -351,15 +366,9 @@ async def kill_process(process_id: int) -> Dict:
         if process_info.state not in [ProcessState.RUNNING, ProcessState.SUSPENDED]:
             raise HTTPException(status_code=400, detail="Process is not running or suspended")
         
-        try:
-            os.kill(process_id, signal.SIGKILL)
-            process_info.state = ProcessState.KILLED
-            return {"status": "success", "message": f"Process {process_id} killed"}
-        except ProcessLookupError:
-            process_info.state = ProcessState.ERROR
-            return {"status": "error", "message": f"Process {process_id} not found"}
-        except PermissionError:
-            raise HTTPException(status_code=403, detail="Permission denied")
+        os.kill(process_info.pid, signal.SIGKILL)
+        process_info.state = ProcessState.KILLED
+        return {"status": "success", "message": f"Process {process_id} killed"}
 
 @app.delete("/process/{process_id}")
 async def remove_process(process_id: int) -> Dict:
