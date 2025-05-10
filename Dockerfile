@@ -46,14 +46,14 @@ COPY --from=builder /app/bin /app/bin
 
 # Create directories for Prover9-Mace4
 RUN mkdir -p /app/bin && \
-    chown -R appuser:appuser /app
+    chown -R apps:apps /app
 
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PATH="/app/bin:${PATH}"
 
 # Switch to non-root user
-USER appuser
+USER apps
 
 # Expose ports
 EXPOSE 8000
