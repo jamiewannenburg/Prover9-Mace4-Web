@@ -28,7 +28,7 @@ from pywebio.output import *
 from pywebio.pin import *
 from pywebio.session import *
 from pywebio.session import get_info
-from pywebio import config
+from pywebio import config, start_server
 
 # Constants
 SAMPLE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Samples')
@@ -313,12 +313,13 @@ def prover9_mace4_app():
     run_panel()
     setup_panel()
     
-    # Set favicon using JavaScript
-    image_url = "Images/p9.ico"
-    run_js("""
-    $('#favicon32,#favicon16').remove(); 
-    $('head').append('<link rel="icon" type="image/png" href="%s">')
-    """ % image_url)
+    #TODO: let favicon be set by the server
+    # # Set favicon using JavaScript
+    # image_url = "Images/p9.ico"
+    # run_js("""
+    # $('#favicon32,#favicon16').remove(); 
+    # $('head').append('<link rel="icon" type="image/png" href="%s">')
+    # """ % image_url)
 
     
     # Initial update
@@ -397,8 +398,8 @@ def prover9_options_panel():
             put_text("Basic Options:"),
             put_input('prover9_max_seconds', label='Max Seconds', type=NUMBER, value=120),
             put_input('prover9_max_weight', label='Max Weight', type=NUMBER, value=100),
-            put_input('prover9_pick_given_ratio', label='Pick Given Ratio', type=NUMBER, value=-1),
-            put_select('prover9_order', label='Order', options=['lpo','rpo','kb'], value='lpo'),
+            put_input('prover9_pick_given_ratio', label='Pick Given Ratio', type=NUMBER, value=100),
+            put_select('prover9_order', label='Order', options=['lpo','rpo','kbo'], value='lpo'),
             put_select('prover9_eq_defs', label='Equality Defs', options=['unfold','fold','pass'], value='unfold'),
             put_checkbox('prover9_flags', label='Prover9 Flags', options=['expand_relational_defs','restrict_denials'], value=False),
         ]),
@@ -546,6 +547,10 @@ def update_process_list() -> None:
                 if process['program'] == 'mace4':
                     actions.append({'label': '🔄', 'value': str(process_id)+'format', 'color': 'primary'})
                     clicks.append(lambda p=process_id: format_mace4_output(p))
+                # Add format button for completed Prover9 processes
+                elif process['program'] == 'prover9':
+                    actions.append({'label': '🔄', 'value': str(process_id)+'format', 'color': 'primary'})
+                    clicks.append(lambda p=process_id: format_prover9_output(p))
                 # Add filter button for completed interpformat processes
                 elif process['program'] == 'interpformat':
                     actions.append({'label': '🔄', 'value': str(process_id)+'format', 'color': 'primary'})
@@ -951,6 +956,27 @@ def format_mace4_output(process_id: int) -> None:
                     # Start interpformat process
                     start_process('interpformat', process['output'], {'format': format_choice})
                     toast("Started interpformat process", color='success')
+            else:
+                toast("No output available", color='warn')
+        else:
+            toast(f"Error getting process status: {response.text}", color='error')
+    except requests.exceptions.RequestException as e:
+        toast(f"Error formatting output: {str(e)}", color='error')
+
+def format_prover9_output(process_id: int) -> None:
+    """Format Prover9 output using prooftrans"""
+    try:
+        # Get the process output
+        response = requests.get(f"{get_api_url()}/status/{process_id}")
+        if response.status_code == 200:
+            process = response.json()
+            if process['output']:
+                # Show format selection dialog
+                format_choice = select('Choose output format', options=PROVER9_FORMATS)
+                if format_choice:
+                    # Start prooftrans process
+                    start_process('prooftrans', process['output'], {'format': format_choice})
+                    toast("Started prooftrans process", color='success')
             else:
                 toast("No output available", color='warn')
         else:
