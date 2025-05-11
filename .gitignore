@@ -1,12 +1,13 @@
-__pycache__
+*/__pycache__
+*/.pytest_cache/
 *.pyc
 *.pyo
 *.pyd
 *.pyw
 *.pyz
-bin/
+*/bin/
 venv/
-.env
+*/.env
 *.code-workspace
 .pytest_cache/
 */node_modules/
