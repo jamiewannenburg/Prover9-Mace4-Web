@@ -17,10 +17,8 @@ from typing import Dict, List, Union
 from typing import Optional as OptionalType
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from enum import Enum
-from pywebio.platform.fastapi import webio_routes
 from web_app import prover9_mace4_app
 
 from pyparsing import (
@@ -349,18 +347,6 @@ def run_program(program: ProgramType, input_text: str, process_id: int, options:
 
 # FastAPI app
 app = FastAPI(title="Prover9-Mace4 API")
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Add PyWebIO routes
-app.mount("/web", FastAPI(routes=webio_routes(prover9_mace4_app)))
 
 class ProgramInput(BaseModel):
     program: ProgramType

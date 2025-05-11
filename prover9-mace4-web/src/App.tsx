@@ -1,0 +1,129 @@
+import React, { useState, useEffect } from 'react';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import { Container, Row, Col, Tabs, Tab, Button, Alert } from 'react-bootstrap';
+import FormulasPanel from './components/FormulasPanel';
+import LanguageOptionsPanel from './components/LanguageOptionsPanel';
+import Prover9OptionsPanel from './components/Prover9OptionsPanel';
+import Mace4OptionsPanel from './components/Mace4OptionsPanel';
+import AdditionalInputPanel from './components/AdditionalInputPanel';
+import RunPanel from './components/RunPanel';
+import ProcessList from './components/ProcessList';
+import ProcessDetails from './components/ProcessDetails';
+import ApiConfig from './components/ApiConfig';
+import { Process } from './types';
+import './App.css';
+
+const PROGRAM_NAME = 'Prover9-Mace4';
+const PROGRAM_VERSION = '0.5 Web';
+const PROGRAM_DATE = 'May 2025';
+const BANNER = `${PROGRAM_NAME} Version ${PROGRAM_VERSION}, ${PROGRAM_DATE}`;
+
+function App() {
+  const [apiUrl, setApiUrl] = useState<string>(() => {
+    return localStorage.getItem('prover9_api_url') || 'http://localhost:8000';
+  });
+  const [processes, setProcesses] = useState<Process[]>([]);
+  const [selectedProcess, setSelectedProcess] = useState<number | null>(null);
+  const [apiConfigured, setApiConfigured] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const saveApiUrl = (url: string) => {
+    localStorage.setItem('prover9_api_url', url);
+    setApiUrl(url);
+    setApiConfigured(true);
+  };
+
+  useEffect(() => {
+    const storedUrl = localStorage.getItem('prover9_api_url');
+    if (storedUrl) {
+      setApiUrl(storedUrl);
+      setApiConfigured(true);
+    }
+  }, []);
+
+  const updateProcessList = async () => {
+    try {
+      const response = await fetch(`${apiUrl}/processes`);
+      if (response.ok) {
+        const data = await response.json();
+        setProcesses(data);
+      } else {
+        setError('Failed to fetch processes');
+      }
+    } catch (err) {
+      setError('API server not available');
+    }
+  };
+
+  useEffect(() => {
+    if (apiConfigured) {
+      updateProcessList();
+      const intervalId = setInterval(updateProcessList, 3000);
+      return () => clearInterval(intervalId);
+    }
+  }, [apiConfigured, apiUrl]);
+
+  if (!apiConfigured) {
+    return <ApiConfig onSave={saveApiUrl} initialValue={apiUrl} />;
+  }
+
+  return (
+    <Container fluid className="app-container">
+      <header className="app-header">
+        <h1>{PROGRAM_NAME}</h1>
+        <p>{BANNER}</p>
+      </header>
+      
+      {error && <Alert variant="danger" onClose={() => setError(null)} dismissible>{error}</Alert>}
+      
+      <Row className="mb-3">
+        <Col>
+          <RunPanel apiUrl={apiUrl} />
+        </Col>
+      </Row>
+      
+      <Row className="mb-3">
+        <Col>
+          <Tabs defaultActiveKey="formulas" className="mb-3">
+            <Tab eventKey="formulas" title="Formulas">
+              <FormulasPanel apiUrl={apiUrl} />
+            </Tab>
+            <Tab eventKey="language" title="Language Options">
+              <LanguageOptionsPanel />
+            </Tab>
+            <Tab eventKey="prover9" title="Prover9 Options">
+              <Prover9OptionsPanel />
+            </Tab>
+            <Tab eventKey="mace4" title="Mace4 Options">
+              <Mace4OptionsPanel />
+            </Tab>
+            <Tab eventKey="additional" title="Additional Input">
+              <AdditionalInputPanel />
+            </Tab>
+          </Tabs>
+        </Col>
+      </Row>
+      
+      <Row>
+        <Col md={8}>
+          <ProcessList 
+            processes={processes} 
+            selectedProcess={selectedProcess}
+            onSelectProcess={setSelectedProcess}
+            apiUrl={apiUrl}
+            refreshProcesses={updateProcessList}
+          />
+        </Col>
+        <Col md={4}>
+          <ProcessDetails 
+            processId={selectedProcess} 
+            processes={processes}
+            apiUrl={apiUrl}
+          />
+        </Col>
+      </Row>
+    </Container>
+  );
+}
+
+export default App;
