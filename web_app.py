@@ -9,11 +9,6 @@ import re
 import argparse
 from functools import partial
 from PIL import Image
-from pyparsing import (
-    Word, alphas, alphanums, Literal, Group, Optional, 
-    OneOrMore, ZeroOrMore, ParseException, restOfLine,
-    QuotedString, delimitedList, ParseResults, Regex, Keyword, OneOrMore, printables
-)
 
 import time
 import json
@@ -98,6 +93,25 @@ def read_sample(filename):
 
 # TODO: if docker folder is available, list files in docker folder
 
+def parse_file(content: str) -> Dict:
+    """Parse the input file to extract assumptions, goals, and options using pyparsing"""
+    response = requests.post(f"{get_api_url()}/parse", json={"input": content})
+    if response.status_code == 200:
+        return response.json()
+    else:
+        toast(f"Error parsing input: {response.text}", color='error')
+        return {
+            'assumptions': '',
+            'goals': '',
+            'prover9_options': set(),
+            'mace4_options': set(),
+            'language_options': '',
+            'global_options': set(),
+            'global_assigns': {},
+            'prover9_assigns': {},
+            'mace4_assigns': {}
+        }
+
 
 def format_duration(seconds: float) -> str:
     """Format duration in seconds to human readable string"""
@@ -153,132 +167,7 @@ def format_process_info(process: Dict) -> str:
     return "\n".join(info)
 
 
-def parse_file(content):
-    """Parse the input file to extract assumptions, goals, and options using pyparsing"""
-    # Define basic tokens
-    period = Literal(".")
-    identifier = Word(alphanums+"_")
-    quoted_string = QuotedString('"', escChar='\\')
-    
-    # Define comment
-    comment = Group(Literal("%") + restOfLine)
-    
-    # Define option patterns
-    set_option = Group(Literal("set")+ Literal("(").suppress() + (identifier | quoted_string) + Literal(")").suppress() + period)+Optional(comment)
-    clear_option = Group(Literal("clear")+ Literal("(").suppress() + (identifier | quoted_string) + Literal(")").suppress() + period)+Optional(comment)
-    assign_option = Group(Literal("assign")+ Literal("(").suppress() + (identifier | quoted_string) + Literal(",").suppress() + (Word(alphanums+"_"+'-') | quoted_string) + Literal(")").suppress() + period)+Optional(comment)
-    language_option = Group(Literal("op")+ Literal("(").suppress() + (identifier | quoted_string) + ZeroOrMore(Literal(",").suppress() + (Word(alphanums+"_"+'-') | quoted_string)) + Literal(")").suppress() + period)+Optional(comment)
 
-    # Define section markers
-    formulas_assumptions = Group(Literal("formulas(assumptions)") + period)+Optional(comment)
-    formulas_goals = Group(Literal("formulas(goals)") + period)+Optional(comment)
-    end_of_list = Group(Literal("end_of_list") + period)+Optional(comment)
-    
-    # Define program blocks
-    if_prover9 = Group(Literal("if(Prover9)") + period)+Optional(comment)
-    if_mace4 = Group(Literal("if(Mace4)") + period)+Optional(comment)
-    end_if = Group(Literal("end_if") + period)+Optional(comment)
-    
-    # Define formula (anything ending with period, excluding comments and special markers)
-    formula =  Group(~(end_of_list)+Word(printables)+restOfLine) #| if_prover9 | if_mace4 | end_if formulas_assumptions | formulas_goals |
-    
-    # Define sections
-    assumptions_section = formulas_assumptions + ZeroOrMore(formula, stop_on=end_of_list) + end_of_list
-    goals_section = formulas_goals + ZeroOrMore(formula, stop_on=end_of_list) + end_of_list
-    
-    # Define program blocks
-    prover9_block = if_prover9 + ZeroOrMore(comment | set_option | assign_option | clear_option) + end_if
-    mace4_block = if_mace4 + ZeroOrMore(comment | set_option | assign_option | clear_option) + end_if
-    
-    # Define global options
-    #global_options = ZeroOrMore(set_option | assign_option | clear_option)
-    
-    # Define the complete grammar 
-    #grammar = Optional(ZeroOrMore(comment)) + Optional(global_options) + Optional(ZeroOrMore(comment)) + Optional(ZeroOrMore(language_option)) + Optional(ZeroOrMore(comment)) + Optional(prover9_block) + Optional(ZeroOrMore(comment)) + Optional(mace4_block) + Optional(ZeroOrMore(comment)) + Optional(assumptions_section) + Optional(ZeroOrMore(comment)) + Optional(goals_section)
-    grammar = ZeroOrMore( comment | prover9_block | mace4_block | assumptions_section | goals_section | set_option | assign_option | clear_option | language_option)
-    # TODO: leave room for additional input
-
-    # Parse the content
-    try:
-        result = grammar.parseString(content)
-    except ParseException as e:
-        print(f"Parse error: {e}")
-        toast("Parse error: " + str(e), color='danger')
-        return {
-            'assumptions': '',
-            'goals': '',
-            'prover9_options': set(),
-            'mace4_options': set(),
-            'global_options': set(),
-            'global_assigns': {},
-            'language_options': '',
-            'prover9_assigns': {},
-            'mace4_assigns': {}
-        }
-    
-    # Initialize result containers
-    parsed = {
-        'assumptions': '',
-        'goals': '',
-        'prover9_options': set(),
-        'mace4_options': set(),
-        'language_options': '',
-        'global_options': set(),
-        'global_assigns': {},
-        'prover9_assigns': {},
-        'mace4_assigns': {}
-    }
-    
-    # Process the parsed results
-    current_section = None
-    current_program = None
-    
-    for item in result:
-        if item[0] == "formulas(assumptions)":
-            current_section = "assumptions"
-        elif item[0] == "formulas(goals)":
-            current_section = "goals"
-        elif item[0] == "end_of_list":
-            current_section = None
-        elif item[0] == "if(Prover9)":
-            current_program = "prover9"
-        elif item[0] == "if(Mace4)":
-            current_program = "mace4"
-        elif item[0] == "end_if":
-            current_program = None
-        elif item[0] == "set":
-            option = item[1]
-            if current_program == "prover9":
-                parsed['prover9_options'].add((option, True))
-            elif current_program == "mace4":
-                parsed['mace4_options'].add((option, True))
-            else:
-                parsed['global_options'].add((option, True))
-        elif item[0] == "clear":
-            option = item[1]
-            if current_program == "prover9":
-                parsed['prover9_options'].add((option, False))
-            elif current_program == "mace4":
-                parsed['mace4_options'].add((option, False))
-            else:
-                parsed['global_options'].add((option, False))
-        elif item[0] == "assign":
-            option_name = item[1]
-            option_value = item[2]
-            if current_program == "prover9":
-                parsed['prover9_assigns'][option_name] = option_value
-            elif current_program == "mace4":
-                parsed['mace4_assigns'][option_name] = option_value
-            else:
-                parsed['global_assigns'][option_name] = option_value
-        elif item[0] == "op":
-            parsed['language_options']+='op('+', '.join(item[1:-1])+').\n'
-        elif current_section == "assumptions":
-            # concatenate the item list to a string
-            parsed['assumptions'] += ''.join(item)+'\n'
-        elif current_section == "goals":
-            parsed['goals'] += ''.join(item)+'\n'
-    return parsed
 
 # Main application function
 @config(theme="yeti", title=PROGRAM_NAME)
