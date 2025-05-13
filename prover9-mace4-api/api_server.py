@@ -19,7 +19,6 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from enum import Enum
-from web_app import prover9_mace4_app
 
 from pyparsing import (
     Word, alphas, alphanums, Literal, Group, Optional, 
