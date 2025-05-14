@@ -547,9 +547,6 @@ def parse(input: ParseInput) -> Dict:
             parsed['goals'] += ''.join(item)+'\n'
     return parsed
 
-# Serve static files from images directory
-app.mount("/images", StaticFiles(directory="images"), name="images")
-
 # Serve static files from samples directory
 app.mount("/samples", StaticFiles(directory="samples"), name="samples")
 

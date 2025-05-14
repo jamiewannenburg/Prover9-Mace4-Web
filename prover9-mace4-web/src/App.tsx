@@ -88,8 +88,9 @@ function App() {
   return (
     <Container fluid className="app-container">
       <header className="app-header">
-        <h1>{PROGRAM_NAME}</h1>
-        <p>{BANNER}</p>
+        <img src="prover9-5a-128t.gif" alt={BANNER} className="app-logo" />
+        <span className="app-logo-separator"></span>
+        <img src="mace4-90t.gif" alt={BANNER} className="app-logo" />
       </header>
       
       {error && <Alert variant="danger" onClose={() => setError(null)} dismissible>{error}</Alert>}
