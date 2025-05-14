@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button, ButtonGroup, Row, Col, Form, Modal } from 'react-bootstrap';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
@@ -78,7 +78,6 @@ const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
   const [showSampleSelector, setShowSampleSelector] = useState(false);
   const [samples, setSamples] = useState<SampleNode[]>([]);
   const [loadingSamples, setLoadingSamples] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Abstraction for handling file content and parsing
   const handleFileContent = async (content: string, filename?: string) => {
@@ -94,39 +93,21 @@ const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
         const parsed = await parseResponse.json();
         setAssumptions(parsed.assumptions || '');
         setGoals(parsed.goals || '');
+        
+        // Save to localStorage
+        localStorage.setItem('assumptions', parsed.assumptions || '');
+        localStorage.setItem('goals', parsed.goals || '');
       } else {
         // Fallback to setting raw content as assumptions
         setAssumptions(content);
         setGoals('');
+        
+        // Save to localStorage
+        localStorage.setItem('assumptions', content);
+        localStorage.setItem('goals', '');
       }
     } catch (error) {
       alert(`Error processing ${filename || 'file'}`);
-      console.error(error);
-    }
-  };
-
-  const saveInput = async () => {
-    try {
-      const saveData = {
-        assumptions,
-        goals,
-      };
-
-      const response = await fetch(`${apiUrl}/save_input`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(saveData),
-      });
-
-      if (response.ok) {
-        alert('Input saved successfully');
-      } else {
-        alert('Failed to save input');
-      }
-    } catch (error) {
-      alert('Error saving input');
       console.error(error);
     }
   };
@@ -147,13 +128,6 @@ const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
     }
   };
 
-  const loadSample = async () => {
-    setShowSampleSelector(true);
-    if (samples.length === 0) {
-      await loadSamples();
-    }
-  };
-
   const handleSelectSample = async (path: string) => {
     try {
       const response = await fetch(`${apiUrl}/samples/${encodeURIComponent(path)}`);
@@ -169,47 +143,56 @@ const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
     setShowSampleSelector(false);
   };
 
-  const handleUpload = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const content = await file.text();
-      await handleFileContent(content, file.name);
-    } catch (error) {
-      alert('Error reading file');
-      console.error(error);
-    }
-
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
   const handleClear = () => {
     setAssumptions('');
     setGoals('');
+    localStorage.setItem('assumptions', '');
+    localStorage.setItem('goals', '');
   };
+  
+  // Add event listeners for the custom events from RunPanel
+  useEffect(() => {
+    const handleFormulasUpdated = () => {
+      setAssumptions(localStorage.getItem('assumptions') || '');
+      setGoals(localStorage.getItem('goals') || '');
+    };
+    
+    const handleShowSamples = () => {
+      setShowSampleSelector(true);
+      if (samples.length === 0) {
+        loadSamples();
+      }
+    };
+    
+    window.addEventListener('formulas-updated', handleFormulasUpdated);
+    window.addEventListener('show-samples', handleShowSamples);
+    
+    return () => {
+      window.removeEventListener('formulas-updated', handleFormulasUpdated);
+      window.removeEventListener('show-samples', handleShowSamples);
+    };
+  }, [samples.length]); // Add loadSamples to dependencies if needed
+  
+  // Save to localStorage when assumptions or goals change
+  useEffect(() => {
+    localStorage.setItem('assumptions', assumptions);
+    localStorage.setItem('goals', goals);
+  }, [assumptions, goals]);
+  
+  // Load from localStorage on initial mount
+  useEffect(() => {
+    const savedAssumptions = localStorage.getItem('assumptions');
+    const savedGoals = localStorage.getItem('goals');
+    
+    if (savedAssumptions) setAssumptions(savedAssumptions);
+    if (savedGoals) setGoals(savedGoals);
+  }, []);
 
   return (
     <div className="formulas-panel">
       <Row className="mb-3">
         <Col>
           <ButtonGroup>
-            <Button variant="outline-primary" onClick={saveInput}>
-              💾 Save
-            </Button>
-            <Button variant="outline-primary" onClick={handleUpload}>
-              📁 Upload
-            </Button>
-            <Button variant="outline-primary" onClick={loadSample}>
-              📋 Samples
-            </Button>
             <Button variant="outline-danger" onClick={handleClear}>
               🧹 Clear
             </Button>
@@ -249,14 +232,11 @@ const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
           )}
         </Modal.Body>
       </Modal>
-
-      {/* Hidden file input for upload */}
+      
       <input
         type="file"
-        ref={fileInputRef}
-        onChange={handleFileSelect}
-        accept=".txt,.in,.p9,.m4"
         style={{ display: 'none' }}
+        onChange={() => {}}
       />
     </div>
   );

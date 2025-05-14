@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Button, ButtonGroup, Alert } from 'react-bootstrap';
+import React, { useState, useRef } from 'react';
+import { Button, ButtonGroup, Alert, Row, Col } from 'react-bootstrap';
 
 interface RunPanelProps {
   apiUrl: string;
@@ -8,6 +8,7 @@ interface RunPanelProps {
 const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const generateInput = async (): Promise<string | null> => {
     try {
@@ -116,26 +117,128 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
     }
   };
 
+  // Added functions from FormulasPanel
+  const saveInput = async () => {
+    try {
+      const assumptions = localStorage.getItem('assumptions') || '';
+      const goals = localStorage.getItem('goals') || '';
+      
+      const saveData = {
+        assumptions,
+        goals,
+      };
+
+      const response = await fetch(`${apiUrl}/save_input`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(saveData),
+      });
+
+      if (response.ok) {
+        alert('Input saved successfully');
+      } else {
+        alert('Failed to save input');
+      }
+    } catch (error) {
+      alert('Error saving input');
+      console.error(error);
+    }
+  };
+
+  const handleUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const content = await file.text();
+      
+      // Parse the content through the API
+      const parseResponse = await fetch(`${apiUrl}/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: content })
+      });
+      
+      if (parseResponse.ok) {
+        const parsed = await parseResponse.json();
+        localStorage.setItem('assumptions', parsed.assumptions || '');
+        localStorage.setItem('goals', parsed.goals || '');
+        
+        // Dispatch a custom event to notify FormulasPanel of the changes
+        window.dispatchEvent(new CustomEvent('formulas-updated'));
+      } else {
+        // Fallback to setting raw content as assumptions
+        localStorage.setItem('assumptions', content);
+        localStorage.setItem('goals', '');
+        
+        // Dispatch a custom event to notify FormulasPanel of the changes
+        window.dispatchEvent(new CustomEvent('formulas-updated'));
+      }
+    } catch (error) {
+      alert(`Error processing ${file.name}`);
+      console.error(error);
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const loadSample = () => {
+    // Notify FormulasPanel to show the sample selector
+    window.dispatchEvent(new CustomEvent('show-samples'));
+  };
+
   return (
     <div className="run-panel p-3 bg-light border rounded">
       {error && <Alert variant="danger" onClose={() => setError(null)} dismissible>{error}</Alert>}
       
-      <ButtonGroup>
-        <Button 
-          variant="primary" 
-          onClick={runProver9} 
-          disabled={loading}
-        >
-          {loading ? 'Running...' : 'Run Prover9'}
-        </Button>
-        <Button 
-          variant="secondary" 
-          onClick={runMace4} 
-          disabled={loading}
-        >
-          {loading ? 'Running...' : 'Run Mace4'}
-        </Button>
-      </ButtonGroup>
+      <Row className="mb-3">
+        <Col md={6}>
+          <ButtonGroup className="me-3">
+            <Button 
+              variant="primary" 
+              onClick={runProver9} 
+              disabled={loading}
+            >
+              {loading ? 'Running...' : 'Run Prover9'}
+            </Button>
+            <Button 
+              variant="secondary" 
+              onClick={runMace4} 
+              disabled={loading}
+            >
+              {loading ? 'Running...' : 'Run Mace4'}
+            </Button>
+          </ButtonGroup>
+        </Col>
+        <Col md={6}>
+          <ButtonGroup>
+            <Button variant="outline-primary" onClick={saveInput}>
+              💾 Save
+            </Button>
+            <Button variant="outline-primary" onClick={handleUpload}>
+              📁 Upload
+            </Button>
+            <Button variant="outline-primary" onClick={loadSample}>
+              📋 Samples
+            </Button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: 'none' }}
+              onChange={handleFileSelect}
+            />
+          </ButtonGroup>
+        </Col>
+      </Row>
     </div>
   );
 };
