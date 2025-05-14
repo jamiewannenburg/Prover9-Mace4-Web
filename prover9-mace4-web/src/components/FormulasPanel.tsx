@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button, ButtonGroup, Row, Col, Form, Modal } from 'react-bootstrap';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
@@ -78,6 +78,32 @@ const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
   const [showSampleSelector, setShowSampleSelector] = useState(false);
   const [samples, setSamples] = useState<SampleNode[]>([]);
   const [loadingSamples, setLoadingSamples] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Abstraction for handling file content and parsing
+  const handleFileContent = async (content: string, filename?: string) => {
+    try {
+      // Parse the content to extract assumptions and goals
+      const parseResponse = await fetch(`${apiUrl}/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: content })
+      });
+      
+      if (parseResponse.ok) {
+        const parsed = await parseResponse.json();
+        setAssumptions(parsed.assumptions || '');
+        setGoals(parsed.goals || '');
+      } else {
+        // Fallback to setting raw content as assumptions
+        setAssumptions(content);
+        setGoals('');
+      }
+    } catch (error) {
+      alert(`Error processing ${filename || 'file'}`);
+      console.error(error);
+    }
+  };
 
   const saveInput = async () => {
     try {
@@ -134,22 +160,7 @@ const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
       
       if (response.ok) {
         const content = await response.text();
-        // Parse the content to extract assumptions and goals
-        const parseResponse = await fetch(`${apiUrl}/parse`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ input: content })
-        });
-        
-        if (parseResponse.ok) {
-          const parsed = await parseResponse.json();
-          setAssumptions(parsed.assumptions || '');
-          setGoals(parsed.goals || '');
-        } else {
-          // Fallback to setting raw content
-          setAssumptions(content);
-          setGoals('');
-        }
+        await handleFileContent(content, path);
       }
     } catch (error) {
       alert('Error loading sample');
@@ -158,26 +169,25 @@ const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
     setShowSampleSelector(false);
   };
 
-  const parseInput = async () => {
-    try {
-      const response = await fetch(`${apiUrl}/parse`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ input: assumptions + '\n\n' + goals }),
-      });
+  const handleUpload = () => {
+    fileInputRef.current?.click();
+  };
 
-      if (response.ok) {
-        const parsedData: ParsedInput = await response.json();
-        setAssumptions(parsedData.assumptions);
-        setGoals(parsedData.goals);
-        
-        // TODO: Update other form fields with parsed data
-      }
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const content = await file.text();
+      await handleFileContent(content, file.name);
     } catch (error) {
-      alert('Error parsing input');
+      alert('Error reading file');
       console.error(error);
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -194,11 +204,11 @@ const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
             <Button variant="outline-primary" onClick={saveInput}>
               💾 Save
             </Button>
-            <Button variant="outline-primary" onClick={parseInput}>
-              📄 Parse
+            <Button variant="outline-primary" onClick={handleUpload}>
+              📁 Upload
             </Button>
             <Button variant="outline-primary" onClick={loadSample}>
-              Samples
+              📋 Samples
             </Button>
             <Button variant="outline-danger" onClick={handleClear}>
               🧹 Clear
@@ -239,6 +249,15 @@ const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
           )}
         </Modal.Body>
       </Modal>
+
+      {/* Hidden file input for upload */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        accept=".txt,.in,.p9,.m4"
+        style={{ display: 'none' }}
+      />
     </div>
   );
 };
