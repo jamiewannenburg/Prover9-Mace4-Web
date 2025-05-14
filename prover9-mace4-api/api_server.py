@@ -4,6 +4,7 @@ Prover9-Mace4 API Server
 A FastAPI-based REST API for Prover9 and Mace4
 """
 
+import argparse
 import os
 import re
 import sys
@@ -17,6 +18,8 @@ from typing import Dict, List, Union
 from typing import Optional as OptionalType
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from enum import Enum
 
@@ -347,6 +350,15 @@ def run_program(program: ProgramType, input_text: str, process_id: int, options:
 # FastAPI app
 app = FastAPI(title="Prover9-Mace4 API")
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
 class ProgramInput(BaseModel):
     program: ProgramType
     input: str
@@ -535,6 +547,58 @@ def parse(input: ParseInput) -> Dict:
             parsed['goals'] += ''.join(item)+'\n'
     return parsed
 
+# Serve static files from images directory
+app.mount("/images", StaticFiles(directory="images"), name="images")
+
+# Serve static files from samples directory
+app.mount("/samples", StaticFiles(directory="samples"), name="samples")
+
+# Give a list of samples
+@app.get("/samples")
+async def list_samples() -> List[Dict]:
+    def build_tree(directory, base_path=""):
+        items = []
+        for item in sorted(os.listdir(directory)):
+            item_path = os.path.join(directory, item)
+            relative_path = os.path.join(base_path, item) if base_path else item
+            
+            if os.path.isdir(item_path):
+                node = {
+                    "name": item,
+                    "type": "directory",
+                    "path": relative_path,
+                    "children": build_tree(item_path, relative_path)
+                }
+            else:
+                node = {
+                    "name": item,
+                    "type": "file", 
+                    "path": relative_path
+                }
+            items.append(node)
+        return items
+    
+    return build_tree("samples")
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--host", type=str, default="localhost")
+    parser.add_argument("--reload", action="store_false")
+    parser.add_argument("--debug", action="store_false")
+    parser.add_argument("--production", action="store_true")
+    args = parser.parse_args()
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    if args.debug:
+        # set reload to true if not specified
+        if not args.reload:
+            args.reload = True
+    if args.production:
+        # set reload to false
+        args.reload = False
+        # set host to 0.0.0.0 if not specified
+        if args.host == "localhost":
+            args.host = "0.0.0.0"
+            
+    uvicorn.run("api_server:app", host=args.host, port=args.port, reload=args.reload) 

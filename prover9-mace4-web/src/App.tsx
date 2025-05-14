@@ -42,15 +42,33 @@ function App() {
   }, []);
 
   const updateProcessList = async () => {
+    const processUrl = `${apiUrl}/processes`
     try {
-      const response = await fetch(`${apiUrl}/processes`);
-      if (response.ok) {
-        const data = await response.json();
-        setProcesses(data);
-      } else {
-        setError('Failed to fetch processes');
+      const response = await fetch(processUrl);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
+        setError(`Failed to fetch processes: ${response.status} ${response.statusText}`);
+        return;
       }
+      
+      const data = await response.json();
+      if (!Array.isArray(data)) {
+        console.error('Invalid response format:', data);
+        setError('Invalid response format from API');
+        return;
+      }
+      
+      setProcesses(data);
     } catch (err) {
+      console.error('API Error:', {
+        url: processUrl,
+        error: err instanceof Error ? err.message : String(err)
+      });
       setError('API server not available');
     }
   };

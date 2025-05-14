@@ -81,3 +81,16 @@ export interface SavedFile {
   name: string;
   path: string;
 } 
+
+export interface SampleNode {
+  name: string;
+  type: 'file' | 'directory';
+  path: string;
+  children?: SampleNode[];
+}
+
+export interface SampleTreeProps {
+  nodes: SampleNode[];
+  onSelectFile: (path: string) => void;
+  level?: number;
+}

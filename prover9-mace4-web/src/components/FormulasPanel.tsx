@@ -1,8 +1,72 @@
-import React, { useState } from 'react';
-import { Button, ButtonGroup, Row, Col, Form } from 'react-bootstrap';
+import React, { useState, useEffect } from 'react';
+import { Button, ButtonGroup, Row, Col, Form, Modal } from 'react-bootstrap';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
-import { ParsedInput } from '../types';
+import { ParsedInput, SampleNode, SampleTreeProps } from '../types';
+
+const SampleTree: React.FC<SampleTreeProps> = ({ nodes, onSelectFile, level = 0 }) => {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (path: string) => {
+    const newExpanded = new Set(expanded);
+    if (newExpanded.has(path)) {
+      newExpanded.delete(path);
+    } else {
+      newExpanded.add(path);
+    }
+    setExpanded(newExpanded);
+  };
+
+  return (
+    <ul style={{ paddingLeft: level * 16, listStyle: 'none', margin: 0 }}>
+      {nodes.map((node) => (
+        <li key={node.path}>
+          {node.type === 'directory' ? (
+            <>
+              <div
+                style={{ 
+                  cursor: 'pointer', 
+                  padding: '4px 8px',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                onClick={() => toggleExpanded(node.path)}
+              >
+                <span style={{ marginRight: '8px' }}>
+                  {expanded.has(node.path) ? '📁' : '📂'}
+                </span>
+                {node.name}
+              </div>
+              {expanded.has(node.path) && node.children && (
+                <SampleTree 
+                  nodes={node.children} 
+                  onSelectFile={onSelectFile}
+                  level={level + 1}
+                />
+              )}
+            </>
+          ) : (
+            <div
+              style={{ 
+                cursor: 'pointer', 
+                padding: '4px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                borderRadius: '4px'
+              }}
+              onClick={() => onSelectFile(node.path)}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <span style={{ marginRight: '8px' }}>📄</span>
+              {node.name}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+};
 
 interface FormulasPanelProps {
   apiUrl: string;
@@ -11,6 +75,9 @@ interface FormulasPanelProps {
 const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
   const [assumptions, setAssumptions] = useState<string>('');
   const [goals, setGoals] = useState<string>('');
+  const [showSampleSelector, setShowSampleSelector] = useState(false);
+  const [samples, setSamples] = useState<SampleNode[]>([]);
+  const [loadingSamples, setLoadingSamples] = useState(false);
 
   const saveInput = async () => {
     try {
@@ -38,29 +105,57 @@ const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
     }
   };
 
-  const loadSample = async () => {
+  const loadSamples = async () => {
+    setLoadingSamples(true);
     try {
-      // Get list of samples first
       const response = await fetch(`${apiUrl}/samples`);
+      if (response.ok) {
+        const data = await response.json();
+        setSamples(data);
+      }
+    } catch (error) {
+      console.error('Error loading samples:', error);
+      alert('Error loading samples');
+    } finally {
+      setLoadingSamples(false);
+    }
+  };
+
+  const loadSample = async () => {
+    setShowSampleSelector(true);
+    if (samples.length === 0) {
+      await loadSamples();
+    }
+  };
+
+  const handleSelectSample = async (path: string) => {
+    try {
+      const response = await fetch(`${apiUrl}/samples/${encodeURIComponent(path)}`);
       
       if (response.ok) {
-        const samples = await response.json();
-        // TODO: Show sample selection dialog
-        if (samples.length > 0) {
-          const firstSample = samples[0];
-          const sampleResponse = await fetch(`${apiUrl}/sample/${encodeURIComponent(firstSample)}`);
-          
-          if (sampleResponse.ok) {
-            const sampleData = await sampleResponse.json();
-            setAssumptions(sampleData.assumptions || '');
-            setGoals(sampleData.goals || '');
-          }
+        const content = await response.text();
+        // Parse the content to extract assumptions and goals
+        const parseResponse = await fetch(`${apiUrl}/parse`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: content })
+        });
+        
+        if (parseResponse.ok) {
+          const parsed = await parseResponse.json();
+          setAssumptions(parsed.assumptions || '');
+          setGoals(parsed.goals || '');
+        } else {
+          // Fallback to setting raw content
+          setAssumptions(content);
+          setGoals('');
         }
       }
     } catch (error) {
       alert('Error loading sample');
       console.error(error);
     }
+    setShowSampleSelector(false);
   };
 
   const parseInput = async () => {
@@ -131,6 +226,19 @@ const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
           onChange={(value) => setGoals(value)}
         />
       </Form.Group>
+
+      <Modal show={showSampleSelector} onHide={() => setShowSampleSelector(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Select a Sample</Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ maxHeight: '60vh', overflow: 'auto' }}>
+          {loadingSamples ? (
+            <div>Loading samples...</div>
+          ) : (
+            <SampleTree nodes={samples} onSelectFile={handleSelectSample} />
+          )}
+        </Modal.Body>
+      </Modal>
     </div>
   );
 };
