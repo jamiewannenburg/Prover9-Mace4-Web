@@ -103,13 +103,13 @@ def parse_file(content: str) -> Dict:
         return {
             'assumptions': '',
             'goals': '',
-            'prover9_options': set(),
-            'mace4_options': set(),
+            'prover9_flags': set(),
+            'mace4_flags': set(),
             'language_options': '',
-            'global_options': set(),
-            'global_assigns': {},
-            'prover9_assigns': {},
-            'mace4_assigns': {}
+            'global_flags': set(),
+            'global_parameters': {},
+            'prover9_parameters': {},
+            'mace4_parameters': {}
         }
 
 
@@ -508,13 +508,13 @@ def update_options(parsed):
     additional_input = ""
     
     # Update global options
-    for name in parsed['global_assigns']:
+    for name in parsed['global_parameters']:
         if name == "domain_size":
-            pin_update('mace4_start_size', value=int(parsed['global_assigns'][name]))
-            pin_update('mace4_end_size', value=int(parsed['global_assigns'][name]))
+            pin_update('mace4_start_size', value=int(parsed['global_parameters'][name]))
+            pin_update('mace4_end_size', value=int(parsed['global_parameters'][name]))
         else:
-            additional_input += f"assign({name}, {parsed['global_assigns'][name]}).\n"
-    for name, value in parsed['global_options']:
+            additional_input += f"assign({name}, {parsed['global_parameters'][name]}).\n"
+    for name, value in parsed['global_flags']:
         if name == "prolog_style_variables":
             if value:
                 pin_update('language_flags', value=['prolog_style_variables'])
@@ -527,22 +527,22 @@ def update_options(parsed):
                 additional_input += f"clear({name}).\n"
 
     # Update Prover9 assignments
-    additional_p9_assigns = ''
-    for name in parsed['prover9_assigns']:
+    additional_p9_parameters = ''
+    for name in parsed['prover9_parameters']:
         if 'prover9_'+name in PROVER9_PARAMS:
             try:
-                pin_update('prover9_'+name, value=int(parsed['prover9_assigns'][name]))
+                pin_update('prover9_'+name, value=int(parsed['prover9_parameters'][name]))
             except ValueError:
-                pin_update('prover9_'+name, value=parsed['prover9_assigns'][name])
+                pin_update('prover9_'+name, value=parsed['prover9_parameters'][name])
             # TODO: see how pin_update fails
-            # additional_input += f"assign({name}, {parsed['prover9_assigns'][name]}).\n"
+            # additional_input += f"assign({name}, {parsed['prover9_parameters'][name]}).\n"
         else:
-            additional_p9_assigns += f"assign({name}, {parsed['prover9_assigns'][name]}).\n"
+            additional_p9_parameters += f"assign({name}, {parsed['prover9_parameters'][name]}).\n"
     # Update Prover9 options
     p9_opt_list = []
     p9_opt_set = []
     additional_p9_flags = ''
-    for name, value in parsed['prover9_options']:
+    for name, value in parsed['prover9_flags']:
         if name in PROVER9_FLAGS.map(lambda x: x[0]):
             p9_opt_set.append(name)
             if value:
@@ -558,33 +558,33 @@ def update_options(parsed):
                 p9_opt_list.append(name)
 
     pin_update('prover9_flags', value=p9_opt_list)
-    if len(additional_p9_assigns) > 0 or len(additional_p9_flags) > 0:
+    if len(additional_p9_parameters) > 0 or len(additional_p9_flags) > 0:
         additional_input += "if(Prover9).\n"
-        additional_input += additional_p9_assigns
+        additional_input += additional_p9_parameters
         additional_input += additional_p9_flags
         additional_input += "end_if.\n"
     # Update Mace4 options
-    additional_m4_assigns = ''
-    for name in parsed['mace4_assigns']:
+    additional_m4_parameters = ''
+    for name in parsed['mace4_parameters']:
         if 'mace4_'+name in MACE4_PARAMS:
             try:
-                pin_update('mace4_'+name, value=int(parsed['mace4_assigns'][name]))
+                pin_update('mace4_'+name, value=int(parsed['mace4_parameters'][name]))
             except ValueError:
-                pin_update('mace4_'+name, value=parsed['mace4_assigns'][name])
+                pin_update('mace4_'+name, value=parsed['mace4_parameters'][name])
             # TODO: see how pin_update fails
-            # additional_input += f"assign({name}, {parsed['mace4_assigns'][name]}).\n"
+            # additional_input += f"assign({name}, {parsed['mace4_parameters'][name]}).\n"
         else:
             if name == "domain_size":
-                pin_update('mace4_start_size', value=int(parsed['mace4_assigns'][name]))
-                pin_update('mace4_end_size', value=int(parsed['mace4_assigns'][name]))
+                pin_update('mace4_start_size', value=int(parsed['mace4_parameters'][name]))
+                pin_update('mace4_end_size', value=int(parsed['mace4_parameters'][name]))
             else:
-                additional_m4_assigns += f"  assign({name}, {parsed['mace4_assigns'][name]}).\n"
+                additional_m4_parameters += f"  assign({name}, {parsed['mace4_parameters'][name]}).\n"
             
     # update mace4 options
     m4_opt_list = []
     m4_opt_set = []
     additional_m4_flags = ''
-    for name, value in parsed['mace4_options']:
+    for name, value in parsed['mace4_flags']:
         if name in MACE4_FLAGS.map(lambda x: x[0]):
             m4_opt_set.append(name)
             if value:
@@ -600,9 +600,9 @@ def update_options(parsed):
                 m4_opt_list.append(name)
 
     #pin_update('mace4_flags', value=m4_opt_list) #TODO not defined
-    if len(additional_m4_assigns) > 0 or len(additional_m4_flags) > 0:
+    if len(additional_m4_parameters) > 0 or len(additional_m4_flags) > 0:
         additional_input += "if(Mace4).\n"
-        additional_input += additional_m4_assigns
+        additional_input += additional_m4_parameters
         additional_input += additional_m4_flags
         additional_input += "end_if.\n"
     
@@ -678,8 +678,8 @@ def generate_input():
         pname = re.sub('prover9_', "", name)
         if pin[name] is not None:
             content += f"  assign({pname}, {pin[name]}).\n"
-    for name in parsed['prover9_assigns']:
-        content += f"  assign({name}, {parsed['prover9_assigns'][name]}).\n"
+    for name in parsed['prover9_parameters']:
+        content += f"  assign({name}, {parsed['prover9_parameters'][name]}).\n"
     for name,default in PROVER9_FLAGS:
         value = (name in pin.prover9_flags)
         if value != default:
@@ -687,7 +687,7 @@ def generate_input():
                 content += f"  set({name}).\n"
             else:
                 content += f"  clear({name}).\n"
-    for name,value in parsed['prover9_options']:
+    for name,value in parsed['prover9_flags']:
         if value:
             content += f"  set({name}).\n"
         else:
@@ -700,8 +700,8 @@ def generate_input():
         pname = re.sub('mace4_', "", name)
         if pin[name] is not None:
             content += f"  assign({pname}, {pin[name]}).\n"
-    for name in parsed['mace4_assigns']:
-        content += f"  assign({name}, {parsed['mace4_assigns'][name]}).\n"
+    for name in parsed['mace4_parameters']:
+        content += f"  assign({name}, {parsed['mace4_parameters'][name]}).\n"
     for name,default in MACE4_FLAGS:
         value = (name in pin.mace4_flags)
         if value != default:
@@ -709,7 +709,7 @@ def generate_input():
                 content += f"  set({name}).\n"
             else:
                 content += f"  clear({name}).\n"
-    for name,value in parsed['mace4_options']:
+    for name,value in parsed['mace4_flags']:
         if value:
             content += f"  set({name}).\n"
         else:
@@ -721,17 +721,17 @@ def generate_input():
     parsed = {
         'assumptions': '',
         'goals': '',
-        'prover9_options': set(),
-        'mace4_options': set(),
+        'prover9_flags': set(),
+        'mace4_flags': set(),
         'language_options': '',
-        'global_options': set(),
-        'global_assigns': {},
-        'prover9_assigns': {},
-        'mace4_assigns': {}
+        'global_flags': set(),
+        'global_parameters': {},
+        'prover9_parameters': {},
+        'mace4_parameters': {}
     }
-    for name in parsed['global_assigns']:
-        content += f"assign({name}, {parsed['global_assigns'][name]}).\n"
-    for name,value in parsed['global_options']:
+    for name in parsed['global_parameters']:
+        content += f"assign({name}, {parsed['global_parameters'][name]}).\n"
+    for name,value in parsed['global_flags']:
         if value:
             content += f"set({name}).\n"
         else:

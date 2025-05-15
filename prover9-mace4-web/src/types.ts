@@ -24,13 +24,13 @@ export interface Process {
 export interface ParsedInput {
   assumptions: string;
   goals: string;
-  prover9_options: string[];
-  mace4_options: string[];
+  prover9_flags: string[];
+  mace4_flags: string[];
   language_options: string;
-  global_options: string[];
-  global_assigns: Record<string, string>;
-  prover9_assigns: Record<string, string>;
-  mace4_assigns: Record<string, string>;
+  global_flags: string[];
+  global_parameters: Record<string, string>;
+  prover9_parameters: Record<string, string>;
+  mace4_parameters: Record<string, string>;
 }
 
 export interface Prover9Options {

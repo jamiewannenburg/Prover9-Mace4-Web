@@ -62,6 +62,13 @@ class ProcessInfo(BaseModel):
     resource_usage: OptionalType[Dict] = None
     options: OptionalType[Dict] = None
 
+# flag type (boolean)
+# parameter type 
+
+# Type for Mace4 options
+class Mace4Options():
+
+
 # Global process tracking
 processes: Dict[int, ProcessInfo] = {}
 process_lock = threading.Lock()
@@ -155,10 +162,10 @@ prover9_block = if_prover9 + ZeroOrMore(comment | set_option | assign_option | c
 mace4_block = if_mace4 + ZeroOrMore(comment | set_option | assign_option | clear_option) + end_if
 
 # Define global options
-#global_options = ZeroOrMore(set_option | assign_option | clear_option)
+#global_flags = ZeroOrMore(set_option | assign_option | clear_option)
 
 # Define the complete grammar 
-#grammar = Optional(ZeroOrMore(comment)) + Optional(global_options) + Optional(ZeroOrMore(comment)) + Optional(ZeroOrMore(language_option)) + Optional(ZeroOrMore(comment)) + Optional(prover9_block) + Optional(ZeroOrMore(comment)) + Optional(mace4_block) + Optional(ZeroOrMore(comment)) + Optional(assumptions_section) + Optional(ZeroOrMore(comment)) + Optional(goals_section)
+#grammar = Optional(ZeroOrMore(comment)) + Optional(global_flags) + Optional(ZeroOrMore(comment)) + Optional(ZeroOrMore(language_option)) + Optional(ZeroOrMore(comment)) + Optional(prover9_block) + Optional(ZeroOrMore(comment)) + Optional(mace4_block) + Optional(ZeroOrMore(comment)) + Optional(assumptions_section) + Optional(ZeroOrMore(comment)) + Optional(goals_section)
 grammar = ZeroOrMore( comment | prover9_block | mace4_block | assumptions_section | goals_section | set_option | assign_option | clear_option | language_option)
 
 # Utility functions
@@ -487,13 +494,13 @@ def parse(input: ParseInput) -> Dict:
     parsed = {
         'assumptions': '',
         'goals': '',
-        'prover9_options': set(),
-        'mace4_options': set(),
+        'prover9_flags': set(),
+        'mace4_flags': set(),
         'language_options': '',
-        'global_options': set(),
-        'global_assigns': {},
-        'prover9_assigns': {},
-        'mace4_assigns': {}
+        'global_flags': set(),
+        'global_parameters': {},
+        'prover9_parameters': {},
+        'mace4_parameters': {}
     }
     
     # Process the parsed results
@@ -516,28 +523,28 @@ def parse(input: ParseInput) -> Dict:
         elif item[0] == "set":
             option = item[1]
             if current_program == "prover9":
-                parsed['prover9_options'].add((option, True))
+                parsed['prover9_flags'].add((option, True))
             elif current_program == "mace4":
-                parsed['mace4_options'].add((option, True))
+                parsed['mace4_flags'].add((option, True))
             else:
-                parsed['global_options'].add((option, True))
+                parsed['global_flags'].add((option, True))
         elif item[0] == "clear":
             option = item[1]
             if current_program == "prover9":
-                parsed['prover9_options'].add((option, False))
+                parsed['prover9_flags'].add((option, False))
             elif current_program == "mace4":
-                parsed['mace4_options'].add((option, False))
+                parsed['mace4_flags'].add((option, False))
             else:
-                parsed['global_options'].add((option, False))
+                parsed['global_flags'].add((option, False))
         elif item[0] == "assign":
             option_name = item[1]
             option_value = item[2]
             if current_program == "prover9":
-                parsed['prover9_assigns'][option_name] = option_value
+                parsed['prover9_parameters'][option_name] = option_value
             elif current_program == "mace4":
-                parsed['mace4_assigns'][option_name] = option_value
+                parsed['mace4_parameters'][option_name] = option_value
             else:
-                parsed['global_assigns'][option_name] = option_value
+                parsed['global_parameters'][option_name] = option_value
         elif item[0] == "op":
             parsed['language_options']+='op('+', '.join(item[1:-1])+').\n'
         elif current_section == "assumptions":
