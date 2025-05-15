@@ -11,6 +11,7 @@ import ProcessList from './components/ProcessList';
 import ProcessDetails from './components/ProcessDetails';
 import ApiConfig from './components/ApiConfig';
 import { Process } from './types';
+import { FormulaProvider } from './context/FormulaContext';
 import './App.css';
 
 const PROGRAM_NAME = 'Prover9-Mace4';
@@ -86,62 +87,64 @@ function App() {
   }
 
   return (
-    <Container fluid className="app-container">
-      <header className="app-header">
-        <img src="prover9-5a-128t.gif" alt={BANNER} className="app-logo" />
-        <span className="app-logo-separator"></span>
-        <img src="mace4-90t.gif" alt={BANNER} className="app-logo" />
-      </header>
-      
-      {error && <Alert variant="danger" onClose={() => setError(null)} dismissible>{error}</Alert>}
-      
-      <Row className="mb-3">
-        <Col>
-          <RunPanel apiUrl={apiUrl} />
-        </Col>
-      </Row>
-      
-      <Row className="mb-3">
-        <Col>
-          <Tabs defaultActiveKey="formulas" className="mb-3">
-            <Tab eventKey="formulas" title="Formulas">
-              <FormulasPanel apiUrl={apiUrl} />
-            </Tab>
-            <Tab eventKey="language" title="Language Options">
-              <LanguageOptionsPanel />
-            </Tab>
-            <Tab eventKey="prover9" title="Prover9 Options">
-              <Prover9OptionsPanel />
-            </Tab>
-            <Tab eventKey="mace4" title="Mace4 Options">
-              <Mace4OptionsPanel />
-            </Tab>
-            <Tab eventKey="additional" title="Additional Input">
-              <AdditionalInputPanel />
-            </Tab>
-          </Tabs>
-        </Col>
-      </Row>
-      
-      <Row>
-        <Col md={8}>
-          <ProcessList 
-            processes={processes} 
-            selectedProcess={selectedProcess}
-            onSelectProcess={setSelectedProcess}
-            apiUrl={apiUrl}
-            refreshProcesses={updateProcessList}
-          />
-        </Col>
-        <Col md={4}>
-          <ProcessDetails 
-            processId={selectedProcess} 
-            processes={processes}
-            apiUrl={apiUrl}
-          />
-        </Col>
-      </Row>
-    </Container>
+    <FormulaProvider>
+      <Container fluid className="app-container">
+        <header className="app-header">
+          <img src="prover9-5a-128t.gif" alt={BANNER} className="app-logo" />
+          <span className="app-logo-separator"></span>
+          <img src="mace4-90t.gif" alt={BANNER} className="app-logo" />
+        </header>
+        
+        {error && <Alert variant="danger" onClose={() => setError(null)} dismissible>{error}</Alert>}
+        
+        <Row className="mb-3">
+          <Col>
+            <RunPanel apiUrl={apiUrl} />
+          </Col>
+        </Row>
+        
+        <Row className="mb-3">
+          <Col>
+            <Tabs defaultActiveKey="formulas" className="mb-3">
+              <Tab eventKey="formulas" title="Formulas">
+                <FormulasPanel apiUrl={apiUrl} />
+              </Tab>
+              <Tab eventKey="language" title="Language Options">
+                <LanguageOptionsPanel />
+              </Tab>
+              <Tab eventKey="prover9" title="Prover9 Options">
+                <Prover9OptionsPanel />
+              </Tab>
+              <Tab eventKey="mace4" title="Mace4 Options">
+                <Mace4OptionsPanel />
+              </Tab>
+              <Tab eventKey="additional" title="Additional Input">
+                <AdditionalInputPanel />
+              </Tab>
+            </Tabs>
+          </Col>
+        </Row>
+        
+        <Row>
+          <Col md={8}>
+            <ProcessList 
+              processes={processes} 
+              selectedProcess={selectedProcess}
+              onSelectProcess={setSelectedProcess}
+              apiUrl={apiUrl}
+              refreshProcesses={updateProcessList}
+            />
+          </Col>
+          <Col md={4}>
+            <ProcessDetails 
+              processId={selectedProcess} 
+              processes={processes}
+              apiUrl={apiUrl}
+            />
+          </Col>
+        </Row>
+      </Container>
+    </FormulaProvider>
   );
 }
 

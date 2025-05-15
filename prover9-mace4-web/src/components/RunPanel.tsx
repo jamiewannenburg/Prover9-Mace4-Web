@@ -1,5 +1,71 @@
 import React, { useState, useRef } from 'react';
-import { Button, ButtonGroup, Alert, Row, Col } from 'react-bootstrap';
+import { Button, ButtonGroup, Alert, Row, Col, Modal } from 'react-bootstrap';
+import { SampleNode, SampleTreeProps } from '../types';
+import { useFormulas } from '../context/FormulaContext';
+
+const SampleTree: React.FC<SampleTreeProps> = ({ nodes, onSelectFile, level = 0 }) => {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (path: string) => {
+    const newExpanded = new Set(expanded);
+    if (newExpanded.has(path)) {
+      newExpanded.delete(path);
+    } else {
+      newExpanded.add(path);
+    }
+    setExpanded(newExpanded);
+  };
+
+  return (
+    <ul style={{ paddingLeft: level * 16, listStyle: 'none', margin: 0 }}>
+      {nodes.map((node) => (
+        <li key={node.path}>
+          {node.type === 'directory' ? (
+            <>
+              <div
+                style={{ 
+                  cursor: 'pointer', 
+                  padding: '4px 8px',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                onClick={() => toggleExpanded(node.path)}
+              >
+                <span style={{ marginRight: '8px' }}>
+                  {expanded.has(node.path) ? '📁' : '📂'}
+                </span>
+                {node.name}
+              </div>
+              {expanded.has(node.path) && node.children && (
+                <SampleTree 
+                  nodes={node.children} 
+                  onSelectFile={onSelectFile}
+                  level={level + 1}
+                />
+              )}
+            </>
+          ) : (
+            <div
+              style={{ 
+                cursor: 'pointer', 
+                padding: '4px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                borderRadius: '4px'
+              }}
+              onClick={() => onSelectFile(node.path)}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <span style={{ marginRight: '8px' }}>📄</span>
+              {node.name}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+};
 
 interface RunPanelProps {
   apiUrl: string;
@@ -9,6 +75,10 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showSampleSelector, setShowSampleSelector] = useState(false);
+  const [samples, setSamples] = useState<SampleNode[]>([]);
+  const [loadingSamples, setLoadingSamples] = useState(false);
+  const { assumptions, goals, updateFormulas } = useFormulas();
 
   const generateInput = async (): Promise<string | null> => {
     try {
@@ -18,10 +88,9 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          // In a real application, we would collect this data from the various form components
           formulas: {
-            assumptions: localStorage.getItem('assumptions') || '',
-            goals: localStorage.getItem('goals') || '',
+            assumptions: assumptions,
+            goals: goals,
             language_options: localStorage.getItem('language_options') || '',
             additional_input: localStorage.getItem('additional_input') || '',
           },
@@ -117,12 +186,8 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
     }
   };
 
-  // Added functions from FormulasPanel
   const saveInput = async () => {
     try {
-      const assumptions = localStorage.getItem('assumptions') || '';
-      const goals = localStorage.getItem('goals') || '';
-      
       const saveData = {
         assumptions,
         goals,
@@ -167,18 +232,10 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
       
       if (parseResponse.ok) {
         const parsed = await parseResponse.json();
-        localStorage.setItem('assumptions', parsed.assumptions || '');
-        localStorage.setItem('goals', parsed.goals || '');
-        
-        // Dispatch a custom event to notify FormulasPanel of the changes
-        window.dispatchEvent(new CustomEvent('formulas-updated'));
+        updateFormulas(parsed.assumptions || '', parsed.goals || '');
       } else {
         // Fallback to setting raw content as assumptions
-        localStorage.setItem('assumptions', content);
-        localStorage.setItem('goals', '');
-        
-        // Dispatch a custom event to notify FormulasPanel of the changes
-        window.dispatchEvent(new CustomEvent('formulas-updated'));
+        updateFormulas(content, '');
       }
     } catch (error) {
       alert(`Error processing ${file.name}`);
@@ -192,8 +249,64 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
   };
 
   const loadSample = () => {
-    // Notify FormulasPanel to show the sample selector
-    window.dispatchEvent(new CustomEvent('show-samples'));
+    setShowSampleSelector(true);
+    if (samples.length === 0) {
+      loadSamples();
+    }
+  };
+
+  // Abstraction for handling file content and parsing
+  const handleFileContent = async (content: string, filename?: string) => {
+    try {
+      // Parse the content to extract assumptions and goals
+      const parseResponse = await fetch(`${apiUrl}/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: content })
+      });
+      
+      if (parseResponse.ok) {
+        const parsed = await parseResponse.json();
+        updateFormulas(parsed.assumptions || '', parsed.goals || '');
+      } else {
+        // Fallback to setting raw content as assumptions
+        updateFormulas(content, '');
+      }
+    } catch (error) {
+      alert(`Error processing ${filename || 'file'}`);
+      console.error(error);
+    }
+  };
+
+  const loadSamples = async () => {
+    setLoadingSamples(true);
+    try {
+      const response = await fetch(`${apiUrl}/samples`);
+      if (response.ok) {
+        const data = await response.json();
+        setSamples(data);
+      }
+    } catch (error) {
+      console.error('Error loading samples:', error);
+      alert('Error loading samples');
+    } finally {
+      setLoadingSamples(false);
+    }
+  };
+
+  const handleSelectSample = async (path: string) => {
+    try {
+      const response = await fetch(`${apiUrl}/samples/${encodeURIComponent(path)}`);
+      
+      if (response.ok) {
+        const content = await response.text();
+        await handleFileContent(content, path);
+      }
+    } catch (error) {
+      alert('Error loading sample');
+      console.error(error);
+    }
+    setShowSampleSelector(false);
   };
 
   return (
@@ -239,6 +352,19 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
           </ButtonGroup>
         </Col>
       </Row>
+      
+      <Modal show={showSampleSelector} onHide={() => setShowSampleSelector(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Select a Sample</Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ maxHeight: '60vh', overflow: 'auto' }}>
+          {loadingSamples ? (
+            <div>Loading samples...</div>
+          ) : (
+            <SampleTree nodes={samples} onSelectFile={handleSelectSample} />
+          )}
+        </Modal.Body>
+      </Modal>
     </div>
   );
 };

@@ -1,199 +1,22 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Button, ButtonGroup, Row, Col, Form, Modal } from 'react-bootstrap';
+import React from 'react';
+import { Button, ButtonGroup, Row, Col, Form } from 'react-bootstrap';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
-import { ParsedInput, SampleNode, SampleTreeProps } from '../types';
-
-const SampleTree: React.FC<SampleTreeProps> = ({ nodes, onSelectFile, level = 0 }) => {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
-  const toggleExpanded = (path: string) => {
-    const newExpanded = new Set(expanded);
-    if (newExpanded.has(path)) {
-      newExpanded.delete(path);
-    } else {
-      newExpanded.add(path);
-    }
-    setExpanded(newExpanded);
-  };
-
-  return (
-    <ul style={{ paddingLeft: level * 16, listStyle: 'none', margin: 0 }}>
-      {nodes.map((node) => (
-        <li key={node.path}>
-          {node.type === 'directory' ? (
-            <>
-              <div
-                style={{ 
-                  cursor: 'pointer', 
-                  padding: '4px 8px',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-                onClick={() => toggleExpanded(node.path)}
-              >
-                <span style={{ marginRight: '8px' }}>
-                  {expanded.has(node.path) ? '📁' : '📂'}
-                </span>
-                {node.name}
-              </div>
-              {expanded.has(node.path) && node.children && (
-                <SampleTree 
-                  nodes={node.children} 
-                  onSelectFile={onSelectFile}
-                  level={level + 1}
-                />
-              )}
-            </>
-          ) : (
-            <div
-              style={{ 
-                cursor: 'pointer', 
-                padding: '4px 8px',
-                display: 'flex',
-                alignItems: 'center',
-                borderRadius: '4px'
-              }}
-              onClick={() => onSelectFile(node.path)}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-            >
-              <span style={{ marginRight: '8px' }}>📄</span>
-              {node.name}
-            </div>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-};
+import { useFormulas } from '../context/FormulaContext';
 
 interface FormulasPanelProps {
   apiUrl: string;
 }
 
 const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
-  const [assumptions, setAssumptions] = useState<string>('');
-  const [goals, setGoals] = useState<string>('');
-  const [showSampleSelector, setShowSampleSelector] = useState(false);
-  const [samples, setSamples] = useState<SampleNode[]>([]);
-  const [loadingSamples, setLoadingSamples] = useState(false);
-
-  // Abstraction for handling file content and parsing
-  const handleFileContent = async (content: string, filename?: string) => {
-    try {
-      // Parse the content to extract assumptions and goals
-      const parseResponse = await fetch(`${apiUrl}/parse`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: content })
-      });
-      
-      if (parseResponse.ok) {
-        const parsed = await parseResponse.json();
-        setAssumptions(parsed.assumptions || '');
-        setGoals(parsed.goals || '');
-        
-        // Save to localStorage
-        localStorage.setItem('assumptions', parsed.assumptions || '');
-        localStorage.setItem('goals', parsed.goals || '');
-      } else {
-        // Fallback to setting raw content as assumptions
-        setAssumptions(content);
-        setGoals('');
-        
-        // Save to localStorage
-        localStorage.setItem('assumptions', content);
-        localStorage.setItem('goals', '');
-      }
-    } catch (error) {
-      alert(`Error processing ${filename || 'file'}`);
-      console.error(error);
-    }
-  };
-
-  const loadSamples = async () => {
-    setLoadingSamples(true);
-    try {
-      const response = await fetch(`${apiUrl}/samples`);
-      if (response.ok) {
-        const data = await response.json();
-        setSamples(data);
-      }
-    } catch (error) {
-      console.error('Error loading samples:', error);
-      alert('Error loading samples');
-    } finally {
-      setLoadingSamples(false);
-    }
-  };
-
-  const handleSelectSample = async (path: string) => {
-    try {
-      const response = await fetch(`${apiUrl}/samples/${encodeURIComponent(path)}`);
-      
-      if (response.ok) {
-        const content = await response.text();
-        await handleFileContent(content, path);
-      }
-    } catch (error) {
-      alert('Error loading sample');
-      console.error(error);
-    }
-    setShowSampleSelector(false);
-  };
-
-  const handleClear = () => {
-    setAssumptions('');
-    setGoals('');
-    localStorage.setItem('assumptions', '');
-    localStorage.setItem('goals', '');
-  };
-  
-  // Add event listeners for the custom events from RunPanel
-  useEffect(() => {
-    const handleFormulasUpdated = () => {
-      setAssumptions(localStorage.getItem('assumptions') || '');
-      setGoals(localStorage.getItem('goals') || '');
-    };
-    
-    const handleShowSamples = () => {
-      setShowSampleSelector(true);
-      if (samples.length === 0) {
-        loadSamples();
-      }
-    };
-    
-    window.addEventListener('formulas-updated', handleFormulasUpdated);
-    window.addEventListener('show-samples', handleShowSamples);
-    
-    return () => {
-      window.removeEventListener('formulas-updated', handleFormulasUpdated);
-      window.removeEventListener('show-samples', handleShowSamples);
-    };
-  }, [samples.length]); // Add loadSamples to dependencies if needed
-  
-  // Save to localStorage when assumptions or goals change
-  useEffect(() => {
-    localStorage.setItem('assumptions', assumptions);
-    localStorage.setItem('goals', goals);
-  }, [assumptions, goals]);
-  
-  // Load from localStorage on initial mount
-  useEffect(() => {
-    const savedAssumptions = localStorage.getItem('assumptions');
-    const savedGoals = localStorage.getItem('goals');
-    
-    if (savedAssumptions) setAssumptions(savedAssumptions);
-    if (savedGoals) setGoals(savedGoals);
-  }, []);
+  const { assumptions, goals, setAssumptions, setGoals, clearFormulas } = useFormulas();
 
   return (
     <div className="formulas-panel">
       <Row className="mb-3">
         <Col>
           <ButtonGroup>
-            <Button variant="outline-danger" onClick={handleClear}>
+            <Button variant="outline-danger" onClick={clearFormulas}>
               🧹 Clear
             </Button>
           </ButtonGroup>
@@ -220,24 +43,6 @@ const FormulasPanel: React.FC<FormulasPanelProps> = ({ apiUrl }) => {
         />
       </Form.Group>
 
-      <Modal show={showSampleSelector} onHide={() => setShowSampleSelector(false)} size="lg">
-        <Modal.Header closeButton>
-          <Modal.Title>Select a Sample</Modal.Title>
-        </Modal.Header>
-        <Modal.Body style={{ maxHeight: '60vh', overflow: 'auto' }}>
-          {loadingSamples ? (
-            <div>Loading samples...</div>
-          ) : (
-            <SampleTree nodes={samples} onSelectFile={handleSelectSample} />
-          )}
-        </Modal.Body>
-      </Modal>
-      
-      <input
-        type="file"
-        style={{ display: 'none' }}
-        onChange={() => {}}
-      />
     </div>
   );
 };
