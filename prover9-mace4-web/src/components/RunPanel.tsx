@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Button, ButtonGroup, Alert, Row, Col, Modal } from 'react-bootstrap';
-import { SampleNode, SampleTreeProps } from '../types';
+import { SampleNode, SampleTreeProps, Mace4Options, Prover9Options, ParseOutput, Flag, IntegerParameter } from '../types';
 import { useFormulas } from '../context/FormulaContext';
 
 const SampleTree: React.FC<SampleTreeProps> = ({ nodes, onSelectFile, level = 0 }) => {
@@ -82,6 +82,53 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
 
   const generateInput = async (): Promise<string | null> => {
     try {
+      // Get stored options, ensuring proper structure for both option types
+      let prover9Options: Partial<Prover9Options> = {};
+      let mace4Options: Partial<Mace4Options> = {};
+      
+      try {
+        const storedProver9Options = localStorage.getItem('prover9_options');
+        const storedMace4Options = localStorage.getItem('mace4_options');
+        
+        // Parse stored options or use empty objects if not available
+        prover9Options = storedProver9Options ? JSON.parse(storedProver9Options) : {};
+        mace4Options = storedMace4Options ? JSON.parse(storedMace4Options) : {};
+        
+      } catch (error) {
+        console.warn("Error parsing stored options, using defaults", error);
+        // Use empty objects if parsing fails
+        prover9Options = {};
+        mace4Options = {};
+      }
+
+      // Convert options to the format expected by the API
+      const convertedProver9Options: Record<string, any> = {};
+      const convertedMace4Options: Record<string, any> = {};
+      
+      // Process Prover9 options
+      if (prover9Options) {
+        Object.entries(prover9Options).forEach(([key, option]) => {
+          if (key !== 'extra_flags' && key !== 'extra_parameters' && option) {
+            // For parameters with value property (Flag, IntegerParameter, StringParameter)
+            if (option && typeof option === 'object' && 'value' in option) {
+              convertedProver9Options[key] = option.value;
+            }
+          }
+        });
+      }
+      
+      // Process Mace4 options
+      if (mace4Options) {
+        Object.entries(mace4Options).forEach(([key, option]) => {
+          if (key !== 'extra_flags' && key !== 'extra_parameters' && option) {
+            // For parameters with value property (Flag, IntegerParameter, StringParameter)
+            if (option && typeof option === 'object' && 'value' in option) {
+              convertedMace4Options[key] = option.value;
+            }
+          }
+        });
+      }
+
       const response = await fetch(`${apiUrl}/generate_input`, {
         method: 'POST',
         headers: {
@@ -94,8 +141,8 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
             language_options: localStorage.getItem('language_options') || '',
             additional_input: localStorage.getItem('additional_input') || '',
           },
-          prover9_options: JSON.parse(localStorage.getItem('prover9_options') || '{}'),
-          mace4_options: JSON.parse(localStorage.getItem('mace4_options') || '{}'),
+          prover9_options: convertedProver9Options,
+          mace4_options: convertedMace4Options,
         }),
       });
 
@@ -231,8 +278,21 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
       });
       
       if (parseResponse.ok) {
-        const parsed = await parseResponse.json();
+        const parsed: ParseOutput = await parseResponse.json();
         updateFormulas(parsed.assumptions || '', parsed.goals || '');
+        
+        // Store options to localStorage if present in parsed output
+        if (parsed.prover9_options) {
+          localStorage.setItem('prover9_options', JSON.stringify(parsed.prover9_options));
+        }
+        
+        if (parsed.mace4_options) {
+          localStorage.setItem('mace4_options', JSON.stringify(parsed.mace4_options));
+        }
+        
+        if (parsed.language_options) {
+          localStorage.setItem('language_options', parsed.language_options);
+        }
       } else {
         // Fallback to setting raw content as assumptions
         updateFormulas(content, '');
@@ -252,29 +312,6 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
     setShowSampleSelector(true);
     if (samples.length === 0) {
       loadSamples();
-    }
-  };
-
-  // Abstraction for handling file content and parsing
-  const handleFileContent = async (content: string, filename?: string) => {
-    try {
-      // Parse the content to extract assumptions and goals
-      const parseResponse = await fetch(`${apiUrl}/parse`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: content })
-      });
-      
-      if (parseResponse.ok) {
-        const parsed = await parseResponse.json();
-        updateFormulas(parsed.assumptions || '', parsed.goals || '');
-      } else {
-        // Fallback to setting raw content as assumptions
-        updateFormulas(content, '');
-      }
-    } catch (error) {
-      alert(`Error processing ${filename || 'file'}`);
-      console.error(error);
     }
   };
 
@@ -307,6 +344,44 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
       console.error(error);
     }
     setShowSampleSelector(false);
+  };
+
+  // Abstraction for handling file content and parsing
+  const handleFileContent = async (content: string, filename?: string) => {
+    try {
+      // Parse the content to extract assumptions and goals
+      const parseResponse = await fetch(`${apiUrl}/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: content })
+      });
+      
+      if (parseResponse.ok) {
+        const parsed: ParseOutput = await parseResponse.json();
+        
+        // Update formulas
+        updateFormulas(parsed.assumptions || '', parsed.goals || '');
+        
+        // Store options to localStorage if present in parsed output
+        if (parsed.prover9_options) {
+          localStorage.setItem('prover9_options', JSON.stringify(parsed.prover9_options));
+        }
+        
+        if (parsed.mace4_options) {
+          localStorage.setItem('mace4_options', JSON.stringify(parsed.mace4_options));
+        }
+        
+        if (parsed.language_options) {
+          localStorage.setItem('language_options', parsed.language_options);
+        }
+      } else {
+        // Fallback to setting raw content as assumptions
+        updateFormulas(content, '');
+      }
+    } catch (error) {
+      alert(`Error processing ${filename || 'file'}`);
+      console.error(error);
+    }
   };
 
   return (

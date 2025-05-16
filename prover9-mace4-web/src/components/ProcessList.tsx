@@ -1,6 +1,6 @@
 import React from 'react';
 import { Table, Button, ButtonGroup, Badge } from 'react-bootstrap';
-import { Process } from '../types';
+import { Process, ProcessState } from '../types';
 import { formatDuration } from '../utils';
 
 interface ProcessListProps {
@@ -143,17 +143,17 @@ const ProcessList: React.FC<ProcessListProps> = ({
                 <td>{calculateDuration(process.start_time)}</td>
                 <td>
                   <ButtonGroup size="sm">
-                    {process.state === 'running' && (
+                    {process.state === ProcessState.RUNNING && (
                       <Button variant="warning" onClick={(e) => { e.stopPropagation(); pauseProcess(process.id); }}>
                         Pause
                       </Button>
                     )}
-                    {process.state === 'paused' && (
+                    {process.state === ProcessState.SUSPENDED && (
                       <Button variant="success" onClick={(e) => { e.stopPropagation(); resumeProcess(process.id); }}>
                         Resume
                       </Button>
                     )}
-                    {process.state === 'running' && (
+                    {process.state === ProcessState.RUNNING && (
                       <Button variant="danger" onClick={(e) => { e.stopPropagation(); killProcess(process.id); }}>
                         Kill
                       </Button>
