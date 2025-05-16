@@ -135,12 +135,12 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          formulas: {
-            assumptions: assumptions,
-            goals: goals,
-            language_options: localStorage.getItem('language_options') || '',
-            additional_input: localStorage.getItem('additional_input') || '',
-          },
+          assumptions: assumptions,
+          goals: goals,
+          language_options: localStorage.getItem('language_options') || '',
+          additional_input: localStorage.getItem('additional_input') || '',
+          global_parameters: [],
+          global_flags: [],
           prover9_options: convertedProver9Options,
           mace4_options: convertedMace4Options,
         }),
@@ -151,6 +151,7 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
         return data.input;
       } else {
         const errorData = await response.json();
+        console.log(errorData);
         setError(errorData.error || 'Failed to generate input');
         return null;
       }

@@ -14,7 +14,7 @@ import tempfile
 import subprocess
 import threading
 import psutil
-from typing import Dict, List, Union, Set, Tuple
+from typing import Dict, List, Union, Set, Tuple, Literal
 from typing import Optional as OptionalType
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -90,23 +90,23 @@ class LanguageOption(BaseModel):
 # ordinary option type op(symbols(s)), type is SymbolType.ORDINARY
 class OrdinaryOption(BaseModel):
     symbols: List[str]
-    type: SymbolType = Field(default=SymbolType.ORDINARY, const=True)
-    doc: str = Field(default="Set prefined symbols to ordinary symbols")
+    type: SymbolType = SymbolType.ORDINARY
+    doc: str = "Set prefined symbols to ordinary symbols"
 
 # flag type (boolean)
 class Flag(BaseModel):
     name: str
     value: bool
-    doc: str
-    label: str
+    doc: OptionalType[str] = None
+    label: OptionalType[str] = None
 
 # parameter type (integer, string, boolean)
 class Parameter(BaseModel):
     name: str
     value: Union[int, str, bool]
     default: Union[int, str, bool]
-    doc: str
-    label: str
+    doc: OptionalType[str] = None
+    label: OptionalType[str] = None
 
 # value should be between min and max
 class IntegerParameter(Parameter):
@@ -819,19 +819,22 @@ def parse(input: ParseInput) -> ParseOutput:
             else:
                 parsed.global_parameters.append(Parameter(name=option_name, value=option_value))
         elif item[0] == "op":
-            parsed['language_options']+='op('+', '.join(item[1:-1])+').\n'
+            parsed.language_options+='op('+', '.join(item[1:-1])+').\n'
         elif current_section == "assumptions":
             # concatenate the item list to a string
-            parsed['assumptions'] += ''.join(item)+'\n'
+            parsed.assumptions += ''.join(item)+'\n'
         elif current_section == "goals":
-            parsed['goals'] += ''.join(item)+'\n'
+            parsed.goals += ''.join(item)+'\n'
     return parsed
 
 @app.post("/generate_input")
 def generate_input(input: ParseOutput) -> str:
     """Generate input for Prover9/Mace4"""
+    print(input)
     assumptions = input.assumptions
     goals = input.goals
+    print(input)
+    print(input.additional_input)
     parsed = parse(ParseInput(input=input.additional_input))
 
     # Start with optional settings
