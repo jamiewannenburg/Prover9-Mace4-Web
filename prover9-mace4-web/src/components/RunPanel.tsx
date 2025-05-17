@@ -109,17 +109,19 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        return data.input;
+        // Handle direct text response
+        const text = await response.text();
+        console.log('Response text:', text);
+        return text;
       } else {
         const errorData = await response.json();
-        console.log(errorData);
+        console.error('Error response:', errorData);
         setError(errorData.error || 'Failed to generate input');
         return null;
       }
     } catch (error) {
+      console.error('Exception during generateInput:', error);
       setError('Error generating input');
-      console.error(error);
       return null;
     }
   };
