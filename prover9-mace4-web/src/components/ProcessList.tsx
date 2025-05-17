@@ -132,15 +132,11 @@ const ProcessList: React.FC<ProcessListProps> = ({
             </tr>
           ) : (
             processes.map(process => {
-              console.log('Rendering process:', process);
               return (
                 <tr 
                   key={`process-${process.id}`} 
                   className={selectedProcess === process.id ? 'table-active' : ''}
                   onClick={() => {
-                    console.log('Process clicked:', process);
-                    console.log('Process ID:', process.id);
-                    console.log('Current selected process:', selectedProcess);
                     if (typeof process.id === 'number') {
                       onSelectProcess(process.id);
                     } else {

@@ -49,7 +49,6 @@ function App() {
   const updateProcessList = async () => {
     const processUrl = `${apiUrl}/processes`
     try {
-      console.log('Fetching process list from:', processUrl);
       const response = await fetch(processUrl);
       if (!response.ok) {
         const errorText = await response.text();
@@ -63,8 +62,6 @@ function App() {
       }
       
       const processIds = await response.json();
-      console.log('Received process IDs:', processIds);
-      
       if (!Array.isArray(processIds)) {
         console.error('Invalid response format:', processIds);
         setError('Invalid response format from API');
@@ -74,11 +71,9 @@ function App() {
       // Fetch full details for each process
       const processDetails = await Promise.all(
         processIds.map(async (id) => {
-          console.log('Fetching details for process:', id);
           const detailResponse = await fetch(`${apiUrl}/status/${id}`);
           if (detailResponse.ok) {
             const data = await detailResponse.json();
-            console.log('Process details:', data);
             // Transform the data to match our Process interface
             return {
               ...data,
@@ -92,7 +87,6 @@ function App() {
 
       // Filter out any failed fetches and update state
       const validProcesses = processDetails.filter((p): p is Process => p !== null);
-      console.log('Setting processes state:', validProcesses);
       setProcesses(validProcesses);
     } catch (err) {
       console.error('API Error:', {
@@ -112,7 +106,6 @@ function App() {
   }, [apiConfigured, apiUrl]);
 
   const handleProcessSelection = (id: number | null) => {
-    console.log('Setting selected process to:', id);
     setSelectedProcess(id);
   };
 
