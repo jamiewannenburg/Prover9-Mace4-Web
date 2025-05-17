@@ -69,22 +69,8 @@ export const DEFAULT_OPTIONS: Prover9Options = {
   extra_parameters: []
 };
 
-const DEFAULT_ADDITIONAL_OPTIONS = {
-  auto: true,
-  auto2: false,
-  print_initial_clauses: true,
-  print_given: false,
-  print_kept: false,
-  print_proofs: true,
-  propositional: false,
-  verbose: false,
-  raw: false,
-  output_format: 'text'
-};
-
 const Prover9OptionsPanel: React.FC = () => {
   const { options, setOptions } = useProver9Options();
-  const [additionalOptions, setAdditionalOptions] = useState(DEFAULT_ADDITIONAL_OPTIONS);
 
   const handleIntegerParameterChange = (name: string, value: number) => {
     setOptions({
@@ -111,13 +97,6 @@ const Prover9OptionsPanel: React.FC = () => {
         value: checked
       }
     });
-  };
-
-  const handleAdditionalOptionChange = (name: string, value: any) => {
-    setAdditionalOptions(prev => ({
-      ...prev,
-      [name]: value
-    }));
   };
 
   const renderTooltip = (doc: string) => (
@@ -202,118 +181,6 @@ const Prover9OptionsPanel: React.FC = () => {
     );
   };
 
-  const renderAdditionalOptions = () => {
-    return (
-      <>
-        <Row className="mb-3">
-          <Col md={3}>
-            <Form.Check 
-              type="checkbox"
-              label="Auto"
-              name="auto"
-              checked={additionalOptions.auto}
-              onChange={(e) => handleAdditionalOptionChange("auto", e.target.checked)}
-            />
-          </Col>
-          <Col md={3}>
-            <Form.Check 
-              type="checkbox"
-              label="Auto2"
-              name="auto2"
-              checked={additionalOptions.auto2}
-              onChange={(e) => handleAdditionalOptionChange("auto2", e.target.checked)}
-            />
-          </Col>
-          <Col md={3}>
-            <Form.Check 
-              type="checkbox"
-              label="Raw"
-              name="raw"
-              checked={additionalOptions.raw}
-              onChange={(e) => handleAdditionalOptionChange("raw", e.target.checked)}
-            />
-          </Col>
-          <Col md={3}>
-            <Form.Check 
-              type="checkbox"
-              label="Verbose"
-              name="verbose"
-              checked={additionalOptions.verbose}
-              onChange={(e) => handleAdditionalOptionChange("verbose", e.target.checked)}
-            />
-          </Col>
-        </Row>
-        
-        <Row className="mb-3">
-          <Col md={3}>
-            <Form.Check 
-              type="checkbox"
-              label="Print Initial Clauses"
-              name="print_initial_clauses"
-              checked={additionalOptions.print_initial_clauses}
-              onChange={(e) => handleAdditionalOptionChange("print_initial_clauses", e.target.checked)}
-            />
-          </Col>
-          <Col md={3}>
-            <Form.Check 
-              type="checkbox"
-              label="Print Given"
-              name="print_given"
-              checked={additionalOptions.print_given}
-              onChange={(e) => handleAdditionalOptionChange("print_given", e.target.checked)}
-            />
-          </Col>
-          <Col md={3}>
-            <Form.Check 
-              type="checkbox"
-              label="Print Kept"
-              name="print_kept"
-              checked={additionalOptions.print_kept}
-              onChange={(e) => handleAdditionalOptionChange("print_kept", e.target.checked)}
-            />
-          </Col>
-          <Col md={3}>
-            <Form.Check 
-              type="checkbox"
-              label="Print Proofs"
-              name="print_proofs"
-              checked={additionalOptions.print_proofs}
-              onChange={(e) => handleAdditionalOptionChange("print_proofs", e.target.checked)}
-            />
-          </Col>
-        </Row>
-        
-        <Row className="mb-3">
-          <Col md={3}>
-            <Form.Check 
-              type="checkbox"
-              label="Propositional"
-              name="propositional"
-              checked={additionalOptions.propositional}
-              onChange={(e) => handleAdditionalOptionChange("propositional", e.target.checked)}
-            />
-          </Col>
-          <Col md={3}>
-            <Form.Group>
-              <Form.Label>Output Format</Form.Label>
-              <Form.Select 
-                name="output_format"
-                value={additionalOptions.output_format}
-                onChange={(e) => handleAdditionalOptionChange("output_format", e.target.value)}
-              >
-                {PROVER9_FORMATS.map(format => (
-                  <option key={format.value} value={format.value}>
-                    {format.label}
-                  </option>
-                ))}
-              </Form.Select>
-            </Form.Group>
-          </Col>
-        </Row>
-      </>
-    );
-  };
-
   return (
     <div className="prover9-options-panel">
       <p>Set options for Prover9:</p>
@@ -325,7 +192,6 @@ const Prover9OptionsPanel: React.FC = () => {
           )}
         </Row>
         
-        {renderAdditionalOptions()}
       </Form>
     </div>
   );
