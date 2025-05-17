@@ -336,19 +336,21 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
         <Col md={6}>
           <ButtonGroup className="me-3">
             <Button 
-              variant="primary" 
+              variant="light" 
               onClick={runProver9} 
               disabled={loading}
+              className=""
             >
-              {loading ? 'Running...' : 'Run Prover9'}
+              <img src="prover9-5a-128t.gif" alt="Prover9" className="app-logo" />
             </Button>
             <Button 
-              variant="secondary" 
+              variant="light" 
               onClick={runMace4} 
               disabled={loading}
             >
-              {loading ? 'Running...' : 'Run Mace4'}
+              <img src="mace4-90t.gif" alt="Mace4" className="app-logo" />
             </Button>
+            {loading ? '↺' : ''}
           </ButtonGroup>
         </Col>
         <Col md={6}>

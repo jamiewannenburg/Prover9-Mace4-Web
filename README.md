@@ -11,29 +11,40 @@ A modern browser-based user interface for Prover9 and Mace4 based on PyWebIO.
 - Preserves most of the functionality of the original wxPython GUI
 - Syntax highlighting for input and output
 
-## Installation and Usage
+## Deploying api and gui with docker
 
-First download binaries from https://github.com/jamiewannenburg/ladr/releases or https://github.com/laitep/ladr/releases into the `bin` directory (docker should do this).
+Deploy the following `docker-compose.yml` file with `docker compose up`:
 
-### Option 1: Run with Python directly
+Start the api using docker make the following `docker-compose.yml` file:
 
-1. Install the required dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
+```yaml
+services:
+  api:
+    image: docker.io/jamiewannenburg/prover9-mace4-web-api:latest
+    container_name: prover9-mace4-web-api
+    command: python api_server.py --production --host 0.0.0.0 --port 8000
+    ports:
+      - "127.0.0.1:8000:8000"
+    expose:
+      - "8000"
+    environment:
+      - PYTHONPATH=/app
+    restart: unless-stopped
+   gui:
+    image: docker.io/jamiewannenburg/prover9-mace4-web-gui:latest
+    container_name: prover9-mace4-web-gui
+    ports:
+      - "127.0.0.1:80:80"
+    expose:
+      - "80"
+    depends_on:
+      - api
+    environment:
+      - REACT_APP_API_URL=http://127.0.0.1:8000
+    restart: unless-stopped 
+```
 
-2. Run the api server:
-   ```
-   python api_server.py
-   ```
-
-3. Open your browser and go to http://localhost:8080
-
-### Option 2: Run with Docker
-
-Get the image at https://docker.io/jamiewannenburg/prover9-mace4-web
-
-Or build locally:
+Or clone the git repository and run:
 
 1. Build and start the container using Docker Buildx (recommended method):
    ```
@@ -41,32 +52,10 @@ Or build locally:
    export DOCKER_BUILDKIT=1
    
    # Build and run with docker-compose
-   docker compose up -d
+   docker compose up
    ```
 
-   Alternatively, you can use the classic Docker build method:
-   ```
-   docker compose up -d
-   ```
-
-2. Open your browser and go to http://localhost:8080/web
-
-### Option 3: Build using Docker Buildx CLI directly
-
-If you want to use advanced Buildx features:
-
-```bash
-# Create a new builder instance (first time only)
-docker buildx create --name mybuilder --use
-
-# Build the image
-docker buildx build -t prover9-mace4-web .
-
-# Run the container
-docker run -p 8000:8000 -d prover9-mace4-web
-```
-
-This method allows multi-platform builds and other advanced features.
+To run without docker, see the Readme in the `prover9-mace4-api` and `prover9-mace4-gui` directories.
 
 ## Usage
 
@@ -163,8 +152,8 @@ requests.post(f"http://localhost:8000/kill/{process_id}")
 
 ### Testing
 
-Unit tests for the API are available in `test_api.py`. To run the tests:
+Unit tests for the API are available in `test_api.py` and `test_parse.py`. To run the tests:
 
 ```bash
-python -m unittest test_api.py
+python -m pytest
 ```

@@ -1,10 +1,27 @@
 services:
   api:
-    build: .
-    command: python api_server.py
+    build:
+      context: ./prover9-mace4-api
+      dockerfile: Dockerfile
+    command: python api_server.py --production --host 0.0.0.0 --port 8000
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    expose:
+      - "8000"
     environment:
       - PYTHONPATH=/app
-      - REACT_APP_API_URL=http://localhost:8000
     restart: unless-stopped
+
+  gui:
+    build:
+      context: ./prover9-mace4-web
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:80:80"
+    expose:
+      - "80"
+    depends_on:
+      - api
+    environment:
+      - REACT_APP_API_URL=http://127.0.0.1:8000
+    restart: unless-stopped 

@@ -81,7 +81,6 @@ The docker-compose.yml file sets up two services:
 Key configuration points:
 - The API server is exposed on port 8000
 - The web UI is exposed on port 80
-- The Samples directory is mounted as a volume for the API service
 - The environment variables are configured for communication between services
 
 ## .gitignore and .dockerignore

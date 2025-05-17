@@ -71,6 +71,10 @@ function App() {
       setApiUrl(storedUrl);
       setApiConfigured(true);
     }
+    else if (process.env.REACT_APP_API_URL) {
+      setApiUrl(process.env.REACT_APP_API_URL);
+      setApiConfigured(true);
+    }
   }, []);
 
   const updateProcessList = async () => {
@@ -147,11 +151,11 @@ function App() {
           <LanguageOptionsProvider>
             <AdditionalOptionsProvider>
               <Container fluid className="app-container">
-                <header className="app-header">
+                {/* <header className="app-header">
                   <img src="prover9-5a-128t.gif" alt={BANNER} className="app-logo" />
                   <span className="app-logo-separator"></span>
                   <img src="mace4-90t.gif" alt={BANNER} className="app-logo" />
-                </header>
+                </header> */}
                 
                 {error && <Alert variant="danger" onClose={() => setError(null)} dismissible>{error}</Alert>}
                 
