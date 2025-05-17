@@ -34,7 +34,7 @@ A React-based web interface for Prover9 and Mace4 automated reasoning tools. Thi
 
 3. Create a `.env` file with the API configuration:
    ```
-   REACT_APP_API_URL=http://localhost:8000
+   PROVER9_API_URL=http://localhost:8000
    ```
 
 4. Start the development server:
