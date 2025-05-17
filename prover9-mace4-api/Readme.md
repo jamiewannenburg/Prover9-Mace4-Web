@@ -34,6 +34,14 @@ docker build -t prover9-mace4-web-api .
 docker run -p 8000:8000 -d prover9-mace4-web-api
 ```
 
+To host your own:
+
+```bash
+docker login
+docker tag prover9-mace4-web-api yourusername/prover9-mace4-web-api:latest
+docker push yourusername/prover9-mace4-web-api:latest
+```
+
 Or to run directly:
 
 First download binaries from https://github.com/jamiewannenburg/ladr/releases or https://github.com/laitep/ladr/releases into the `bin` subdirectory (docker does this automatically).

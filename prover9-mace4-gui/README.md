@@ -50,12 +50,34 @@ The application can be run using Docker and docker-compose. The setup includes b
 
 1. Make sure Docker and docker-compose are installed on your system
 
-2. Build and run the containers:
-   ```bash
-   docker-compose up -d
-   ```
+2. Build and run the container:
+```bash
+docker compose up
+```
+Or build explicitly:
+
+```bash
+cd prover9-mace4-api
+# Build the image
+docker build -t prover9-mace4-web-gui .
+
+# Run the container
+docker run -p 80:80 -d prover9-mace4-web-gui
+```
+
+
+To host your own:
+
+```bash
+docker login
+docker tag prover9-mace4-web-gui yourusername/prover9-mace4-web-gui:latest
+docker push yourusername/prover9-mace4-web-gui:latest
+```
+
 
 3. Access the application at [http://localhost](http://localhost)
+
+Enter the url of a running api server.
 
 ## Adapting Docker Files
 
@@ -70,24 +92,6 @@ You can customize the Nginx configuration by uncommenting and modifying the line
 ```
 # COPY nginx.conf /etc/nginx/conf.d/default.conf
 ```
-
-### docker-compose.yml
-
-The docker-compose.yml file sets up two services:
-
-1. `api` - The Python API server
-2. `web` - The React frontend
-
-Key configuration points:
-- The API server is exposed on port 8000
-- The web UI is exposed on port 80
-- The environment variables are configured for communication between services
-
-## .gitignore and .dockerignore
-
-The included `.gitignore` and `.dockerignore` files are configured for a typical React application with some additional patterns for development tools. 
-
-You can add additional patterns if you're using specific tooling or have additional files that shouldn't be tracked.
 
 ## API Communication
 

@@ -44,6 +44,20 @@ services:
     restart: unless-stopped 
 ```
 
+
+### docker-compose.yml
+
+The docker-compose.yml file sets up two services:
+
+1. `api` - The Python API server
+2. `gui` - The React frontend
+
+Key configuration points:
+- The API server is exposed on port 8000
+- The web UI is exposed on port 80
+- The environment variables are configured for communication between services
+
+
 Or clone the git repository and run:
 
 1. Build and start the container using Docker Buildx (recommended method):
