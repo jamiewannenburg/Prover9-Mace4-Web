@@ -1,0 +1,7 @@
+{
+    "python.testing.pytestArgs": [
+        "prover9-mace4-api"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
+}

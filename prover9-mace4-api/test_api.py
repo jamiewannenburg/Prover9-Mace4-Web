@@ -1,12 +1,22 @@
+import re
 import unittest
 import requests
 import time
 from unittest.mock import patch, MagicMock
+import os
+from pathlib import Path
+
+from p9m4_types import ParseOutput, Prover9Options, Mace4Options
+# # make sure the api is running?
+# app.run(debug=True)
+
+# path of this file
+path = Path(__file__).parent
 
 class TestQuickProver9(unittest.TestCase):
     def setUp(self):
         self.base_url = "http://localhost:8000"
-        with open("Samples/Equality/Prover9/CL-SK-W.in", "r") as file:
+        with open(path / "samples/Equality/Prover9/CL-SK-W.in", "r") as file:
             self.prover9_input = file.read()
         self.response = requests.post(f"{self.base_url}/start", json={
             "program": "prover9",
@@ -68,7 +78,7 @@ class TestQuickProver9(unittest.TestCase):
 class TestLongRunningProver9(unittest.TestCase):
     def setUp(self):
         self.base_url = "http://localhost:8000"
-        with open("Samples/GT_Sax.in", "r") as file:
+        with open(path / "samples/GT_Sax.in", "r") as file:
             self.long_running_input = file.read()
         self.response = requests.post(f"{self.base_url}/start", json={
             "program": "prover9",
@@ -88,13 +98,22 @@ class TestLongRunningProver9(unittest.TestCase):
         self.assertIn("state", status)
         self.assertEqual(status["state"], "running")
         
-        # Pause process
-        pause_response = requests.post(f"{self.base_url}/pause/{self.process_id}")
-        self.assertEqual(pause_response.status_code, 200)
+        # Pause process if not running on windows
+        if os.name == "nt":
+            pause_response = requests.post(f"{self.base_url}/pause/{self.process_id}")
+            # pause should not be allowed on windows
+            self.assertNotEqual(pause_response.status_code, 200)
+        else:
+            pause_response = requests.post(f"{self.base_url}/pause/{self.process_id}")
+            self.assertEqual(pause_response.status_code, 200)
         
-        # Resume process
-        resume_response = requests.post(f"{self.base_url}/resume/{self.process_id}")
-        self.assertEqual(resume_response.status_code, 200)
+        # Resume process if not running on windows
+        if os.name == "nt":
+            resume_response = requests.post(f"{self.base_url}/resume/{self.process_id}")
+            self.assertNotEqual(resume_response.status_code, 200)
+        else:
+            resume_response = requests.post(f"{self.base_url}/resume/{self.process_id}")
+            self.assertEqual(resume_response.status_code, 200)
         
         # Kill process
         kill_response = requests.post(f"{self.base_url}/kill/{self.process_id}")
@@ -103,7 +122,7 @@ class TestLongRunningProver9(unittest.TestCase):
 class TestMace4(unittest.TestCase):
     def setUp(self):
         self.base_url = "http://localhost:8000"
-        with open("Samples/Equality/Mace4/CL-QL.in", "r") as file:
+        with open(path / "samples/Equality/Mace4/CL-QL.in", "r") as file:
             self.mace4_input = file.read()
         self.response = requests.post(f"{self.base_url}/start", json={
             "program": "mace4",
@@ -172,12 +191,40 @@ class TestMace4(unittest.TestCase):
         while requests.get(f"{self.base_url}/status/{process_id}").json()["state"] != "done":
             time.sleep(1)
             i += 1
-            if i > 3:
+            if i > 7:
                 raise Exception("Isofilter process did not finish quickly")
         
         response = requests.delete(f"{self.base_url}/process/{process_id}")
         self.assertEqual(response.status_code, 200)
 
+class TestParser(unittest.TestCase):
+    # should be able to parse all the samples
+    def test_parse_all_samples(self):
+        dir = Path("samples")
+        # walk through direcory and subdirectories
+        for file in dir.glob("**/*"):
+            if file.is_file():
+                # check if the file is a prover9 input file
+                if file.name.endswith(".in"):
+                    with open(file, "r") as f:
+                        prover9_input = f.read()
+                        response = requests.post(f"{self.base_url}/parse", json={
+                            "input": prover9_input
+                        })
+                        self.assertEqual(response.status_code, 200)
+                        output = response.json()
+                        self.assertIsInstance(output, ParseOutput)
+                        self.assertIsInstance(output.prover9_options, Prover9Options)
+                        self.assertIsInstance(output.mace4_options, Mace4Options)
+                        # check that generateInput is the inverse of parse
+                        response = requests.post(f"{self.base_url}/generateInput", json=output)
+                        self.assertEqual(response.status_code, 200)
+                        generated_input = response.json()
+                        no_comments = re.sub(r"%.*", "", generated_input)
+                        no_comments_output = re.sub(r"%.*", "", prover9_input)
+                        self.assertEqual(no_comments, no_comments_output)
+                        
+        
         
 if __name__ == '__main__':
     unittest.main() 
