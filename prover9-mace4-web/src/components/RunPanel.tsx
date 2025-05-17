@@ -111,7 +111,9 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
       if (response.ok) {
         // Handle direct text response
         const text = await response.text();
-        return text;
+        // Parse the text as JSON to handle escaped characters
+        const parsedText = JSON.parse(text);
+        return parsedText;
       } else {
         const errorData = await response.json();
         console.error('Error response:', errorData);

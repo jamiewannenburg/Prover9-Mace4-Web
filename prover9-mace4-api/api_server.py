@@ -239,7 +239,6 @@ async def start_program(input: ProgramInput, background_tasks: BackgroundTasks) 
     """Start a new process"""
     # Generate process ID
     process_id = int(time.time() * 1000)
-
     # Create process info
     process_info = ProcessInfo(
         pid=0,

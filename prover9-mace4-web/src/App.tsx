@@ -38,6 +38,33 @@ function App() {
     setApiConfigured(true);
   };
 
+  // Handle page refresh
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Set a flag in sessionStorage to indicate this is a refresh
+      sessionStorage.setItem('isRefresh', 'true');
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Check if this is a refresh
+    const isRefresh = sessionStorage.getItem('isRefresh') === 'true';
+    if (isRefresh) {
+      // Clear all localStorage items except the API URL
+      const apiUrl = localStorage.getItem('prover9_api_url');
+      localStorage.clear();
+      if (apiUrl) {
+        localStorage.setItem('prover9_api_url', apiUrl);
+      }
+      // Clear the refresh flag
+      sessionStorage.removeItem('isRefresh');
+    }
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
   useEffect(() => {
     const storedUrl = localStorage.getItem('prover9_api_url');
     if (storedUrl) {
