@@ -25,7 +25,7 @@ const BANNER = `${PROGRAM_NAME} Version ${PROGRAM_VERSION}, ${PROGRAM_DATE}`;
 
 function App() {
   const [apiUrl, setApiUrl] = useState<string>(() => {
-    return localStorage.getItem('prover9_api_url') || 'http://localhost:8000';
+    return localStorage.getItem('prover9_api_url') || process.env.REACT_APP_API_URL ||'http://localhost:8000';
   });
   const [processes, setProcesses] = useState<Process[]>([]);
   const [selectedProcess, setSelectedProcess] = useState<number | null>(null);
