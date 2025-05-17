@@ -1,6 +1,5 @@
 
-from typing import Dict, List, Union, Set, Tuple, Literal
-from typing import Optional as OptionalType
+from typing import Dict, List, Union, Set, Tuple, Literal, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 from enum import Enum
@@ -30,12 +29,12 @@ class ProcessInfo(BaseModel):
     state: ProcessState
     program: ProgramType
     input: str
-    output: OptionalType[str] = None
-    error: OptionalType[str] = None
-    exit_code: OptionalType[int] = None
-    stats: OptionalType[Dict] = None
-    resource_usage: OptionalType[Dict] = None
-    options: OptionalType[Dict] = None
+    output: Optional[str] = None
+    error: Optional[str] = None
+    exit_code: Optional[int] = None
+    stats: Optional[Dict] = None
+    resource_usage: Optional[Dict] = None
+    options: Optional[Dict] = None
 
 
 # Program exit codes
@@ -126,16 +125,17 @@ class OrdinaryOption(BaseModel):
 class Flag(BaseModel):
     name: str
     value: bool
-    doc: OptionalType[str] = None
-    label: OptionalType[str] = None
+    default: Optional[bool] = None
+    doc: Optional[str] = None
+    label: Optional[str] = None
 
 # parameter type (integer, string, boolean)
 class Parameter(BaseModel):
     name: str
     value: Union[int, str, bool]
-    default: Union[int, str, bool]
-    doc: OptionalType[str] = None
-    label: OptionalType[str] = None
+    default: Optional[Union[int, str, bool]] = None
+    doc: Optional[str] = None
+    label: Optional[str] = None
 
 # value should be between min and max
 class IntegerParameter(Parameter):
@@ -345,7 +345,7 @@ The effect of setting restrict_denials is that proofs will usually be more forwa
 class ProgramInput(BaseModel):
     program: ProgramType
     input: str
-    options: OptionalType[Dict] = None
+    options: Optional[Dict] = None
 
 class ParseInput(BaseModel):
     input: str
@@ -358,3 +358,11 @@ class ParseOutput(BaseModel):
     prover9_options: Prover9Options
     mace4_options: Mace4Options
     language_options: str
+
+class GuiOutput(BaseModel):
+    assumptions: str
+    goals: str
+    prover9_options: Prover9Options
+    mace4_options: Mace4Options
+    language_options: str
+    additional_input: str

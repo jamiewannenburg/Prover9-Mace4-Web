@@ -100,16 +100,6 @@ export interface OrdinaryOption {
   doc: string;
 }
 
-export interface ParsedInput {
-  assumptions: string;
-  goals: string;
-  global_parameters: Parameter[];
-  global_flags: Flag[];
-  prover9_options: Prover9Options;
-  mace4_options: Mace4Options;
-  language_options: string;
-}
-
 export interface Prover9Options {
   max_seconds: IntegerParameter;
   max_weight: IntegerParameter;
@@ -181,4 +171,14 @@ export interface ParseOutput {
   prover9_options: Prover9Options;
   mace4_options: Mace4Options;
   language_options: string;
+  additional_input: string;
+}
+
+export interface GuiOutput {
+  assumptions: string;
+  goals: string;
+  prover9_options: Prover9Options;
+  mace4_options: Mace4Options;
+  language_options: string;
+  additional_input: string;
 }

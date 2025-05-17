@@ -1,7 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { Button, ButtonGroup, Alert, Row, Col, Modal } from 'react-bootstrap';
-import { SampleNode, SampleTreeProps, Mace4Options, Prover9Options, ParseOutput, Flag, IntegerParameter } from '../types';
+import { SampleNode, SampleTreeProps, Mace4Options, Prover9Options, ParseOutput, Flag, IntegerParameter, GuiOutput } from '../types';
 import { useFormulas } from '../context/FormulaContext';
+import { useMace4Options } from '../context/Mace4OptionsContext';
+import { useProver9Options } from '../context/Prover9OptionsContext';
+import { useLanguageOptions } from '../context/LanguageOptionsContext';
+import { useAdditionalOptions } from '../context/AdditionalOptionsContext';
+import { DEFAULT_OPTIONS as PROVER9_DEFAULT_OPTIONS } from './Prover9OptionsPanel';
+import { DEFAULT_OPTIONS as MACE4_DEFAULT_OPTIONS } from './Mace4OptionsPanel';
 
 const SampleTree: React.FC<SampleTreeProps> = ({ nodes, onSelectFile, level = 0 }) => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -79,71 +85,27 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
   const [samples, setSamples] = useState<SampleNode[]>([]);
   const [loadingSamples, setLoadingSamples] = useState(false);
   const { assumptions, goals, updateFormulas } = useFormulas();
+  const { options: prover9Options, setOptions: setProver9Options } = useProver9Options();
+  const { options: mace4Options, setOptions: setMace4Options } = useMace4Options();
+  const { options: languageOptions, setOptions: setLanguageOptions } = useLanguageOptions();
+  const { additionalInput, setAdditionalInput } = useAdditionalOptions();
 
   const generateInput = async (): Promise<string | null> => {
     try {
-      // Get stored options, ensuring proper structure for both option types
-      let prover9Options: Partial<Prover9Options> = {};
-      let mace4Options: Partial<Mace4Options> = {};
-      
-      try {
-        const storedProver9Options = localStorage.getItem('prover9_options');
-        const storedMace4Options = localStorage.getItem('mace4_options');
-        
-        // Parse stored options or use empty objects if not available
-        prover9Options = storedProver9Options ? JSON.parse(storedProver9Options) : {};
-        mace4Options = storedMace4Options ? JSON.parse(storedMace4Options) : {};
-        
-      } catch (error) {
-        console.warn("Error parsing stored options, using defaults", error);
-        // Use empty objects if parsing fails
-        prover9Options = {};
-        mace4Options = {};
-      }
-
-      // Convert options to the format expected by the API
-      const convertedProver9Options: Record<string, any> = {};
-      const convertedMace4Options: Record<string, any> = {};
-      
-      // Process Prover9 options
-      if (prover9Options) {
-        Object.entries(prover9Options).forEach(([key, option]) => {
-          if (key !== 'extra_flags' && key !== 'extra_parameters' && option) {
-            // For parameters with value property (Flag, IntegerParameter, StringParameter)
-            if (option && typeof option === 'object' && 'value' in option) {
-              convertedProver9Options[key] = option.value;
-            }
-          }
-        });
-      }
-      
-      // Process Mace4 options
-      if (mace4Options) {
-        Object.entries(mace4Options).forEach(([key, option]) => {
-          if (key !== 'extra_flags' && key !== 'extra_parameters' && option) {
-            // For parameters with value property (Flag, IntegerParameter, StringParameter)
-            if (option && typeof option === 'object' && 'value' in option) {
-              convertedMace4Options[key] = option.value;
-            }
-          }
-        });
-      }
-
+      const guiOutput: GuiOutput = {
+        assumptions: assumptions,
+        goals: goals,
+        language_options: languageOptions,
+        additional_input: additionalInput,
+        prover9_options: { ...PROVER9_DEFAULT_OPTIONS, ...prover9Options } as Prover9Options,
+        mace4_options: { ...MACE4_DEFAULT_OPTIONS, ...mace4Options } as Mace4Options,
+      };
       const response = await fetch(`${apiUrl}/generate_input`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          assumptions: assumptions,
-          goals: goals,
-          language_options: localStorage.getItem('language_options') || '',
-          additional_input: localStorage.getItem('additional_input') || '',
-          global_parameters: [],
-          global_flags: [],
-          prover9_options: convertedProver9Options,
-          mace4_options: convertedMace4Options,
-        }),
+        body: JSON.stringify(guiOutput),
       });
 
       if (response.ok) {
@@ -270,36 +232,9 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
 
     try {
       const content = await file.text();
-      
-      // Parse the content through the API
-      const parseResponse = await fetch(`${apiUrl}/parse`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: content })
-      });
-      
-      if (parseResponse.ok) {
-        const parsed: ParseOutput = await parseResponse.json();
-        updateFormulas(parsed.assumptions || '', parsed.goals || '');
-        
-        // Store options to localStorage if present in parsed output
-        if (parsed.prover9_options) {
-          localStorage.setItem('prover9_options', JSON.stringify(parsed.prover9_options));
-        }
-        
-        if (parsed.mace4_options) {
-          localStorage.setItem('mace4_options', JSON.stringify(parsed.mace4_options));
-        }
-        
-        if (parsed.language_options) {
-          localStorage.setItem('language_options', parsed.language_options);
-        }
-      } else {
-        // Fallback to setting raw content as assumptions
-        updateFormulas(content, '');
-      }
+      await handleFileContent(content, file.name);
     } catch (error) {
-      alert(`Error processing ${file.name}`);
+      alert(`Error opening file ${file.name}`);
       console.error(error);
     }
 
@@ -363,17 +298,22 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
         // Update formulas
         updateFormulas(parsed.assumptions || '', parsed.goals || '');
         
-        // Store options to localStorage if present in parsed output
+        // Update options using context hooks
         if (parsed.prover9_options) {
-          localStorage.setItem('prover9_options', JSON.stringify(parsed.prover9_options));
+          setProver9Options(parsed.prover9_options);
         }
         
         if (parsed.mace4_options) {
-          localStorage.setItem('mace4_options', JSON.stringify(parsed.mace4_options));
+          setMace4Options(parsed.mace4_options);
         }
         
         if (parsed.language_options) {
-          localStorage.setItem('language_options', parsed.language_options);
+          setLanguageOptions(parsed.language_options);
+        }
+
+        // Only update additional input if it exists in the parsed output
+        if (parsed.additional_input !== undefined) {
+          setAdditionalInput(parsed.additional_input);
         }
       } else {
         // Fallback to setting raw content as assumptions

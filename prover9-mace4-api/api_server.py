@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from p9m4_types import (
     ProgramInput, ParseInput, ParseOutput, ProgramType, ProcessInfo, 
-    ProcessState, Parameter, Flag, Mace4Options, Prover9Options
+    ProcessState, GuiOutput,  Parameter, Flag, Mace4Options, Prover9Options
 )
 
 from parse import parse_string
@@ -355,7 +355,7 @@ def parse(input: ParseInput) -> ParseOutput:
     return result
 
 @app.post("/generate_input")
-def generate_input(input: ParseOutput) -> str:
+def generate_input(input: GuiOutput) -> str:
     """Generate input for Prover9/Mace4"""
     return p9m4_generate_input(input)
 

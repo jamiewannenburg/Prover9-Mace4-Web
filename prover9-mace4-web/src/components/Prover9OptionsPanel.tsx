@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Form, Row, Col, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Prover9Options, Flag, IntegerParameter, StringParameter } from '../types';
+import { useProver9Options } from '../context/Prover9OptionsContext';
 
 const PROVER9_FORMATS = [
   { label: 'Text', value: 'text' },
@@ -8,109 +9,108 @@ const PROVER9_FORMATS = [
   { label: 'TeX', value: 'tex' }
 ];
 
-const Prover9OptionsPanel: React.FC = () => {
-  const [options, setOptions] = useState<Prover9Options>({
-    max_seconds: {
-      name: "max_seconds",
-      value: -1,
-      min: -1,
-      max: Number.MAX_SAFE_INTEGER,
-      default: -1,
-      doc: "Stop searching after this many seconds. Default is -1 (no limit). Command-line -t",
-      label: "Max Seconds"
-    },
-    max_weight: {
-      name: "max_weight",
-      value: 100,
-      min: -Number.MAX_SAFE_INTEGER,
-      max: Number.MAX_SAFE_INTEGER,
-      default: 100,
-      doc: "Derived clauses with weight greater than this value will be discarded. Default is 100.",
-      label: "Max Weight"
-    },
-    pick_given_ratio: {
-      name: "pick_given_ratio",
-      value: 0,
-      min: 0,
-      max: Number.MAX_SAFE_INTEGER,
-      default: 0,
-      doc: "If n>0, the given clauses are chosen in the ratio one part by age, and n parts by weight. Default is 0.",
-      label: "Pick Given Ratio"
-    },
-    order: {
-      name: "order",
-      value: "lpo",
-      possible_values: ["lpo", "rpo", "kbo"],
-      default: "lpo",
-      doc: "This option is used to select the primary term ordering to be used for orienting equalities and for determining maximal literals in clauses. Options: lpo (Lexicographic Path Ordering), rpo (Recursive Path Ordering), kbo (Knuth-Bendix Ordering).",
-      label: "Order"
-    },
-    eq_defs: {
-      name: "eq_defs",
-      value: "unfold",
-      possible_values: ["unfold", "fold", "pass"],
-      default: "unfold",
-      doc: "Controls how equational definitions are handled. If 'unfold', defined symbols are eliminated. If 'fold', equations introduce the defined symbol when possible. If 'pass', no special handling occurs.",
-      label: "Equational Definitions"
-    },
-    expand_relational_defs: {
-      name: "expand_relational_defs",
-      value: false,
-      doc: "If set, Prover9 looks for relational definitions in the assumptions and uses them to rewrite all occurrences of the defined relations elsewhere in the input, before the start of the search.",
-      label: "Expand Relational Definitions"
-    },
-    restrict_denials: {
-      name: "restrict_denials",
-      value: false,
-      doc: "If set, negative clauses (all literals are negative) are given special treatment. The inference rules will not be applied to them, but they will be simplified by back demodulation and back unit deletion.",
-      label: "Restrict Denials"
-    },
-    extra_flags: [],
-    extra_parameters: []
-  });
+export const DEFAULT_OPTIONS: Prover9Options = {
+  max_seconds: {
+    name: "max_seconds",
+    value: -1,
+    min: -1,
+    max: Number.MAX_SAFE_INTEGER,
+    default: -1,
+    doc: "Stop searching after this many seconds. Default is -1 (no limit). Command-line -t",
+    label: "Max Seconds"
+  },
+  max_weight: {
+    name: "max_weight",
+    value: 100,
+    min: -Number.MAX_SAFE_INTEGER,
+    max: Number.MAX_SAFE_INTEGER,
+    default: 100,
+    doc: "Derived clauses with weight greater than this value will be discarded. Default is 100.",
+    label: "Max Weight"
+  },
+  pick_given_ratio: {
+    name: "pick_given_ratio",
+    value: 0,
+    min: 0,
+    max: Number.MAX_SAFE_INTEGER,
+    default: 0,
+    doc: "If n>0, the given clauses are chosen in the ratio one part by age, and n parts by weight. Default is 0.",
+    label: "Pick Given Ratio"
+  },
+  order: {
+    name: "order",
+    value: "lpo",
+    possible_values: ["lpo", "rpo", "kbo"],
+    default: "lpo",
+    doc: "This option is used to select the primary term ordering to be used for orienting equalities and for determining maximal literals in clauses. Options: lpo (Lexicographic Path Ordering), rpo (Recursive Path Ordering), kbo (Knuth-Bendix Ordering).",
+    label: "Order"
+  },
+  eq_defs: {
+    name: "eq_defs",
+    value: "unfold",
+    possible_values: ["unfold", "fold", "pass"],
+    default: "unfold",
+    doc: "Controls how equational definitions are handled. If 'unfold', defined symbols are eliminated. If 'fold', equations introduce the defined symbol when possible. If 'pass', no special handling occurs.",
+    label: "Equational Definitions"
+  },
+  expand_relational_defs: {
+    name: "expand_relational_defs",
+    value: false,
+    doc: "If set, Prover9 looks for relational definitions in the assumptions and uses them to rewrite all occurrences of the defined relations elsewhere in the input, before the start of the search.",
+    label: "Expand Relational Definitions"
+  },
+  restrict_denials: {
+    name: "restrict_denials",
+    value: false,
+    doc: "If set, negative clauses (all literals are negative) are given special treatment. The inference rules will not be applied to them, but they will be simplified by back demodulation and back unit deletion.",
+    label: "Restrict Denials"
+  },
+  extra_flags: [],
+  extra_parameters: []
+};
 
-  // Store additional options not in the Prover9Options interface separately
-  const [additionalOptions, setAdditionalOptions] = useState({
-    auto: true,
-    auto2: false,
-    print_initial_clauses: true,
-    print_given: false,
-    print_kept: false,
-    print_proofs: true,
-    propositional: false,
-    verbose: false,
-    raw: false,
-    output_format: 'text'
-  });
+const DEFAULT_ADDITIONAL_OPTIONS = {
+  auto: true,
+  auto2: false,
+  print_initial_clauses: true,
+  print_given: false,
+  print_kept: false,
+  print_proofs: true,
+  propositional: false,
+  verbose: false,
+  raw: false,
+  output_format: 'text'
+};
+
+const Prover9OptionsPanel: React.FC = () => {
+  const { options, setOptions } = useProver9Options();
+  const [additionalOptions, setAdditionalOptions] = useState(DEFAULT_ADDITIONAL_OPTIONS);
 
   const handleIntegerParameterChange = (name: string, value: number) => {
-    setOptions(prev => ({
-      ...prev,
+    setOptions({
       [name]: {
-        ...(prev[name as keyof Prover9Options] as IntegerParameter),
+        ...(options[name as keyof Prover9Options] as IntegerParameter),
         value
       }
-    }));
+    });
   };
 
   const handleStringParameterChange = (name: string, value: string) => {
-    setOptions(prev => ({
-      ...prev,
+    setOptions({
       [name]: {
-        ...(prev[name as keyof Prover9Options] as StringParameter),
+        ...(options[name as keyof Prover9Options] as StringParameter),
         value
       }
-    }));
+    });
   };
 
   const handleFlagChange = (name: string, checked: boolean) => {
-    setOptions(prev => ({
-      ...prev,
+    setOptions({
       [name]: {
-        ...(prev[name as keyof Prover9Options] as Flag),
+        ...(options[name as keyof Prover9Options] as Flag),
         value: checked
       }
-    }));
+    });
   };
 
   const handleAdditionalOptionChange = (name: string, value: any) => {
@@ -205,7 +205,6 @@ const Prover9OptionsPanel: React.FC = () => {
   const renderAdditionalOptions = () => {
     return (
       <>
-        {/* Boolean options */}
         <Row className="mb-3">
           <Col md={3}>
             <Form.Check 
@@ -244,6 +243,7 @@ const Prover9OptionsPanel: React.FC = () => {
             />
           </Col>
         </Row>
+        
         <Row className="mb-3">
           <Col md={3}>
             <Form.Check 
@@ -282,6 +282,7 @@ const Prover9OptionsPanel: React.FC = () => {
             />
           </Col>
         </Row>
+        
         <Row className="mb-3">
           <Col md={3}>
             <Form.Check 

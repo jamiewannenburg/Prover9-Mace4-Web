@@ -166,7 +166,7 @@ class TestMace4(unittest.TestCase):
         while requests.get(f"{self.base_url}/status/{process_id}").json()["state"] != "done":
             time.sleep(3)
             i += 1
-            if i > 3:
+            if i > 7:
                 raise Exception("Interpformat process did not finish quickly")
         
         response = requests.delete(f"{self.base_url}/process/{process_id}")

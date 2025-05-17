@@ -5,7 +5,7 @@ from pyparsing import (
     QuotedString, delimitedList, ParseResults, Regex, Keyword, OneOrMore, printables
 )
 from p9m4_types import (
-    ParseOutput, Parameter, Flag, Mace4Options, Prover9Options
+    ParseOutput, GuiOutput, Parameter, Flag, Mace4Options, Prover9Options
 )
 
 
@@ -143,12 +143,9 @@ def parse_string(input_string: str) -> ParseOutput:
             parsed.goals += ''.join(item)+'\n'
     return parsed
 
-def generate_input(input_string: str) -> str:
-
+def generate_input(input: GuiOutput) -> str:
     assumptions = input.assumptions
     goals = input.goals
-    print(input)
-    print(input.additional_input)
     parsed = parse_string(input.additional_input)
 
     # Start with optional settings
@@ -242,14 +239,15 @@ def generate_input(input_string: str) -> str:
     content += "end_if.\n\n"
     
     # Add global options and flags
-    for option in [input,parsed]:
-        for param in option.global_parameters:
-            content += f"assign({param.name}, {param.value}).\n"
-        for flag in option.global_flags:
-            if flag.value:
-                content += f"set({flag.name}).\n"
-            else:
-                content += f"clear({flag.name}).\n"
+    for param in parsed.global_parameters:
+        content += f"assign({param.name}, {param.value}).\n"
+    for flag in parsed.global_flags:
+        if flag.value:
+            content += f"set({flag.name}).\n"
+        else:
+            content += f"clear({flag.name}).\n"
+    # Just add the additional input directly
+    # content += input.additional_input
     # add assumptions and goals
     content += "formulas(assumptions).\n"
     content += assumptions + "\n"
