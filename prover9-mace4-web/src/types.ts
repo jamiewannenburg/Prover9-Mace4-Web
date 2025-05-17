@@ -16,6 +16,55 @@ export enum ProgramType {
   PROOFTRANS = "prooftrans"
 }
 
+export interface InterpFormat {
+  label: string;
+  value: string;
+  doc: string;
+}
+
+export const INTERP_FORMATS: InterpFormat[] = [
+  { 
+    label: 'Standard', 
+    value: 'standard',
+    doc: 'This transformation simply extracts the structure from the file and reprints it in the same (standard) format, with one line for each operation. The result should be acceptable to any of the LADR programs that take standard structures.'
+  },
+  { 
+    label: 'Standard2', 
+    value: 'standard2',
+    doc: 'This is similar to standard, except that the binary operations are split across multiple lines to make them more human-readable. The result should be acceptable to any of the LADR programs that take standard structures.'
+  },
+  { 
+    label: 'Portable', 
+    value: 'portable',
+    doc: 'This form is list of ... of lists of strings and natural numbers. It can be parsed by several scripting systems such as GAP, Python, and Javascript.'
+  },
+  { 
+    label: 'Tabular', 
+    value: 'tabular',
+    doc: 'This form is designed to be easily readable by humans. It is not meant for input to other programs.'
+  },
+  { 
+    label: 'Raw', 
+    value: 'raw',
+    doc: 'This form is a sequence of natural numbers.'
+  },
+  { 
+    label: 'Cooked', 
+    value: 'cooked',
+    doc: 'This form is a sequence of ground terms.'
+  },
+  { 
+    label: 'XML', 
+    value: 'xml',
+    doc: 'This is an XML form. It includes a DTD for LADR interpretations and an XML stylesheet for transforming the XML to HTML.'
+  },
+  { 
+    label: 'TeX', 
+    value: 'tex',
+    doc: 'This generates LaTeX source for the interpretation.'
+  }
+]
+
 export enum SymbolType {
   INFIX = "infix",
   INFIX_LEFT = "infix_left",

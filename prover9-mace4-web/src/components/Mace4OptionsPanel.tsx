@@ -3,15 +3,6 @@ import { Form, Row, Col, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Mace4Options, Flag, IntegerParameter, StringParameter } from '../types';
 import { useMace4Options } from '../context/Mace4OptionsContext';
 
-const MACE4_FORMATS = [
-  { label: 'Standard', value: 'standard' },
-  { label: 'Portable', value: 'portable' },
-  { label: 'Text', value: 'text' },
-  { label: 'XML', value: 'xml' },
-  { label: 'Tabular', value: 'tabular' },
-  { label: 'Raw', value: 'raw' },
-  { label: 'Cooked', value: 'cooked' }
-];
 
 export const DEFAULT_OPTIONS: Mace4Options = {
   start_size: {

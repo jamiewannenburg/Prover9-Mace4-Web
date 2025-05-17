@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Button, ButtonGroup, Alert, Row, Col, Modal } from 'react-bootstrap';
-import { SampleNode, SampleTreeProps, Mace4Options, Prover9Options, ParseOutput, Flag, IntegerParameter, GuiOutput } from '../types';
+import { SampleNode, SampleTreeProps, Mace4Options, Prover9Options, ParseOutput, Flag, IntegerParameter, GuiOutput, INTERP_FORMATS, InterpFormat } from '../types';
 import { useFormulas } from '../context/FormulaContext';
 import { useMace4Options } from '../context/Mace4OptionsContext';
 import { useProver9Options } from '../context/Prover9OptionsContext';

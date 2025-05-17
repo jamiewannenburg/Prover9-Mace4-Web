@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Button, ButtonGroup } from 'react-bootstrap';
-import { Process } from '../types';
+import { Card, Button, ButtonGroup, Form } from 'react-bootstrap';
+import { Process, INTERP_FORMATS, InterpFormat } from '../types';
 import { formatDuration } from '../utils';
 
 interface ProcessDetailsProps {
@@ -11,6 +11,7 @@ interface ProcessDetailsProps {
 
 const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, apiUrl }) => {
   const [output, setOutput] = useState<string>('');
+  const [selectedFormat, setSelectedFormat] = useState<string>('standard');
   
   const selectedProcess = processes.find(p => p.id === processId);
   
@@ -96,13 +97,34 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
     if (!processId) return;
     
     try {
-      const response = await fetch(`${apiUrl}/format_mace4_output/${processId}`, {
+      const response = await fetch(`${apiUrl}/start`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          program: 'interpformat',
+          input: output,
+          options: {
+            format: selectedFormat
+          }
+        }),
       });
       
       if (response.ok) {
+        // Process started successfully
         const data = await response.json();
-        setOutput(data.formatted_output || 'No formatted output available');
+        // Start polling for the new process output
+        const pollInterval = setInterval(async () => {
+          const statusResponse = await fetch(`${apiUrl}/status/${data.process_id}`);
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            if (statusData.state === 'done') {
+              setOutput(statusData.output || 'No formatted output available');
+              clearInterval(pollInterval);
+            }
+          }
+        }, 1000);
       } else {
         alert('Failed to format output');
       }
@@ -182,18 +204,29 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
               </Button>
             )}
             {selectedProcess.program === 'mace4' && (
-              <Button variant="outline-success" size="sm" onClick={formatMace4Output}>
-                Format Output
-              </Button>
+              <>
+                <Form.Select 
+                  size="sm"
+                  value={selectedFormat}
+                  onChange={(e) => setSelectedFormat(e.target.value)}
+                  style={{ width: 'auto', display: 'inline-block', marginLeft: '10px' }}
+                >
+                  {INTERP_FORMATS.map(format => (
+                    <option key={format.value} value={format.value} title={format.doc}>
+                      {format.label}
+                    </option>
+                  ))}
+                </Form.Select>
+                <Button variant="outline-success" size="sm" onClick={formatMace4Output}>
+                  Format Output
+                </Button>
+              </>
             )}
           </ButtonGroup>
         </div>
         
         <div className="output-container">
           <h5>Output</h5>
-          {(() => {
-            return null;
-          })()}
           <pre className="output-text p-2 border bg-light" style={{ maxHeight: '500px', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
             {output || 'No output available'}
           </pre>
