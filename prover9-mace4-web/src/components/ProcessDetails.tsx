@@ -22,11 +22,13 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
     
     const fetchOutput = async () => {
       try {
-        const response = await fetch(`${apiUrl}/output/${processId}`);
+        const response = await fetch(`${apiUrl}/status/${processId}`);
         if (response.ok) {
           const data = await response.json();
           setOutput(data.output || 'No output available');
         } else {
+          const errorText = await response.text();
+          console.error('Failed to fetch output:', errorText);
           setOutput('Failed to fetch output');
         }
       } catch (error) {
@@ -40,28 +42,30 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
     // Set up polling for output if process is running
     if (selectedProcess?.state === 'running') {
       const intervalId = setInterval(fetchOutput, 3000);
-      return () => clearInterval(intervalId);
+      return () => {
+        clearInterval(intervalId);
+      };
     }
-  }, [processId, apiUrl, selectedProcess?.state]);
+  }, [processId, apiUrl, selectedProcess]);
   
   const downloadOutput = async () => {
-    if (!processId) return;
+    if (!processId || !output) return;
     
     try {
-      const response = await fetch(`${apiUrl}/download/${processId}`);
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `output_${processId}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      } else {
-        alert('Failed to download output');
-      }
+      // Create a blob from the output text
+      const blob = new Blob([output], { type: 'text/plain' });
+      const url = window.URL.createObjectURL(blob);
+      
+      // Create a temporary link element
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `output_${processId}.txt`;
+      
+      // Append to body, click, and cleanup
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     } catch (error) {
       console.error('Error downloading output:', error);
       alert('Error downloading output');
@@ -187,8 +191,11 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
         
         <div className="output-container">
           <h5>Output</h5>
-          <pre className="output-text p-2 border bg-light" style={{ maxHeight: '500px', overflow: 'auto' }}>
-            {output}
+          {(() => {
+            return null;
+          })()}
+          <pre className="output-text p-2 border bg-light" style={{ maxHeight: '500px', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+            {output || 'No output available'}
           </pre>
         </div>
       </Card.Body>

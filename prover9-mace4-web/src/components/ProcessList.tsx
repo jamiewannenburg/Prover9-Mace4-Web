@@ -131,56 +131,68 @@ const ProcessList: React.FC<ProcessListProps> = ({
               <td colSpan={5} className="text-center">No processes running</td>
             </tr>
           ) : (
-            processes.map(process => (
-              <tr 
-                key={`process-${process.id}`} 
-                className={selectedProcess === process.id ? 'table-active' : ''}
-                onClick={() => onSelectProcess(process.id)}
-              >
-                <td>{process.id}</td>
-                <td>{process.program}</td>
-                <td>{getStatusBadge(process.state)}</td>
-                <td>{calculateDuration(process.start_time)}</td>
-                <td>
-                  <ButtonGroup size="sm">
-                    {process.state === ProcessState.RUNNING && (
+            processes.map(process => {
+              console.log('Rendering process:', process);
+              return (
+                <tr 
+                  key={`process-${process.id}`} 
+                  className={selectedProcess === process.id ? 'table-active' : ''}
+                  onClick={() => {
+                    console.log('Process clicked:', process);
+                    console.log('Process ID:', process.id);
+                    console.log('Current selected process:', selectedProcess);
+                    if (typeof process.id === 'number') {
+                      onSelectProcess(process.id);
+                    } else {
+                      console.error('Invalid process ID:', process.id);
+                    }
+                  }}
+                >
+                  <td>{process.id}</td>
+                  <td>{process.program}</td>
+                  <td>{getStatusBadge(process.state)}</td>
+                  <td>{calculateDuration(process.start_time)}</td>
+                  <td>
+                    <ButtonGroup size="sm">
+                      {process.state === ProcessState.RUNNING && (
+                        <Button 
+                          key="pause"
+                          variant="warning" 
+                          onClick={(e) => { e.stopPropagation(); pauseProcess(process.id); }}
+                        >
+                          Pause
+                        </Button>
+                      )}
+                      {process.state === ProcessState.SUSPENDED && (
+                        <Button 
+                          key="resume"
+                          variant="success" 
+                          onClick={(e) => { e.stopPropagation(); resumeProcess(process.id); }}
+                        >
+                          Resume
+                        </Button>
+                      )}
+                      {process.state === ProcessState.RUNNING && (
+                        <Button 
+                          key="kill"
+                          variant="danger" 
+                          onClick={(e) => { e.stopPropagation(); killProcess(process.id); }}
+                        >
+                          Kill
+                        </Button>
+                      )}
                       <Button 
-                        key="pause"
-                        variant="warning" 
-                        onClick={(e) => { e.stopPropagation(); pauseProcess(process.id); }}
+                        key="remove"
+                        variant="secondary" 
+                        onClick={(e) => { e.stopPropagation(); removeProcess(process.id); }}
                       >
-                        Pause
+                        Remove
                       </Button>
-                    )}
-                    {process.state === ProcessState.SUSPENDED && (
-                      <Button 
-                        key="resume"
-                        variant="success" 
-                        onClick={(e) => { e.stopPropagation(); resumeProcess(process.id); }}
-                      >
-                        Resume
-                      </Button>
-                    )}
-                    {process.state === ProcessState.RUNNING && (
-                      <Button 
-                        key="kill"
-                        variant="danger" 
-                        onClick={(e) => { e.stopPropagation(); killProcess(process.id); }}
-                      >
-                        Kill
-                      </Button>
-                    )}
-                    <Button 
-                      key="remove"
-                      variant="secondary" 
-                      onClick={(e) => { e.stopPropagation(); removeProcess(process.id); }}
-                    >
-                      Remove
-                    </Button>
-                  </ButtonGroup>
-                </td>
-              </tr>
-            ))
+                    </ButtonGroup>
+                  </td>
+                </tr>
+              );
+            })
           )}
         </tbody>
       </Table>
