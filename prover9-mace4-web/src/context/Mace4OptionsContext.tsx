@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { Mace4Options } from '../types';
+import { DEFAULT_OPTIONS } from '../components/Mace4OptionsPanel';
 
 interface Mace4OptionsContextType {
   options: Partial<Mace4Options>;
@@ -11,7 +12,7 @@ interface Mace4OptionsContextType {
 const Mace4OptionsContext = createContext<Mace4OptionsContextType | undefined>(undefined);
 
 export const Mace4OptionsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [options, setOptions] = useState<Partial<Mace4Options>>({});
+  const [options, setOptions] = useState<Partial<Mace4Options>>(DEFAULT_OPTIONS);
 
   // Load from localStorage on initial mount
   useEffect(() => {
@@ -35,7 +36,7 @@ export const Mace4OptionsProvider: React.FC<{ children: ReactNode }> = ({ childr
   };
 
   const clearOptions = () => {
-    setOptions({});
+    setOptions(DEFAULT_OPTIONS);
   };
 
   return (

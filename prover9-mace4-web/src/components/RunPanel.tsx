@@ -111,7 +111,6 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
       if (response.ok) {
         // Handle direct text response
         const text = await response.text();
-        console.log('Response text:', text);
         return text;
       } else {
         const errorData = await response.json();

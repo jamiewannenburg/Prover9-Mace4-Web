@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { Prover9Options } from '../types';
+import { DEFAULT_OPTIONS } from '../components/Prover9OptionsPanel';
 
 interface Prover9OptionsContextType {
   options: Partial<Prover9Options>;
@@ -11,7 +12,7 @@ interface Prover9OptionsContextType {
 const Prover9OptionsContext = createContext<Prover9OptionsContextType | undefined>(undefined);
 
 export const Prover9OptionsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [options, setOptions] = useState<Partial<Prover9Options>>({});
+  const [options, setOptions] = useState<Partial<Prover9Options>>(DEFAULT_OPTIONS);
 
   // Load from localStorage on initial mount
   useEffect(() => {
@@ -35,7 +36,7 @@ export const Prover9OptionsProvider: React.FC<{ children: ReactNode }> = ({ chil
   };
 
   const clearOptions = () => {
-    setOptions({});
+    setOptions(DEFAULT_OPTIONS);
   };
 
   return (

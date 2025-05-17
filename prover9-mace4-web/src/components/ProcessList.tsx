@@ -72,8 +72,9 @@ const ProcessList: React.FC<ProcessListProps> = ({
   
   const removeProcess = async (id: number) => {
     try {
-      const response = await fetch(`${apiUrl}/remove/${id}`, {
-        method: 'POST',
+      // this should call delete event to process/id
+      const response = await fetch(`${apiUrl}/process/${id}`, {
+        method: 'DELETE',
       });
       
       if (response.ok) {
