@@ -135,7 +135,21 @@ def run_program(program: ProgramType, input_text: str, process_id: int, options:
     try:
         # Write input to stdin
         if isinstance(input_text, str):
+            if program == ProgramType.ISOFILTER:
+                # ignore text before DOMAIN SIZE line
+                m = re.search(r'============================== DOMAIN SIZE \d+ =========================\n', input_text)
+                if m:
+                    # get last ============================== end of model ==========================
+                    n = list(re.finditer(r'============================== end of model ==========================\n', input_text))[-1]
+                    if n:
+                        input_text = input_text[m.end():n.start()]
+                        # remove all lines containing `====`
+                        input_text = re.sub(r'====.*\n', '', input_text)
+                    else:
+                        raise HTTPException(status_code=400, detail="Invalid input, expecting ==== end of model ====")
+                print(input_text)
             input_text = input_text.encode('utf-8')
+            
         fin.write(input_text)
         fin.seek(0)
 

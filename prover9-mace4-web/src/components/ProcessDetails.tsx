@@ -13,6 +13,10 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
   const [output, setOutput] = useState<string>('');
   const [selectedFormat, setSelectedFormat] = useState<string>('standard');
   const [prooftransOption, setProoftransOption] = useState<ProoftransOption>(PROOFTRANS_OPTIONS[0]);
+  const [isofilterOptions, setIsofilterOptions] = useState({
+    wrap: false,
+    ignore_constants: false
+  });
   // const [prooftransLabel, setProoftransLabel] = useState<string>('');
   
   const selectedProcess = processes.find(p => p.id === processId);
@@ -162,6 +166,45 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
     }
   };
 
+  const filterModels = async () => {
+    if (!processId) return;
+    
+    try {
+      const response = await fetch(`${apiUrl}/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          program: 'isofilter',
+          input: output,
+          options: isofilterOptions
+        }),
+      });
+      
+      if (response.ok) {
+        // Process started successfully
+        const data = await response.json();
+        // Start polling for the new process output
+        const pollInterval = setInterval(async () => {
+          const statusResponse = await fetch(`${apiUrl}/status/${data.process_id}`);
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            if (statusData.state === 'done') {
+              setOutput(statusData.output || 'No filtered output available');
+              clearInterval(pollInterval);
+            }
+          }
+        }, 1000);
+      } else {
+        alert('Failed to filter models');
+      }
+    } catch (error) {
+      console.error('Error filtering models:', error);
+      alert('Error filtering models');
+    }
+  };
+
   if (!selectedProcess) {
     return (
       <Card>
@@ -227,14 +270,12 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
         <pre className="process-info">{formatProcessInfo(selectedProcess)}</pre>
         
         <hr />
-        
-        <div className="mb-3">
-          <ButtonGroup>
-            <Button variant="outline-primary" size="sm" onClick={downloadOutput}>
-              Download
-            </Button>
-            {selectedProcess.program === 'prover9' && (
-              <>
+        {selectedProcess.program === 'prover9' && (
+          <div className="mb-3">
+            <ButtonGroup>
+              <Button variant="outline-primary" size="sm" onClick={downloadOutput}>
+                Download
+              </Button>
                 <Form.Select 
                   size="sm"
                   value={prooftransOption.format}
@@ -247,6 +288,9 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
                     </option>
                   ))}
                 </Form.Select>
+            </ButtonGroup>
+            <ButtonGroup>
+              <>
                 <div className="ms-2 d-inline-block">
                   {prooftransOption.parents_only !== undefined && (
                     <Form.Check
@@ -255,7 +299,7 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
                       checked={prooftransOption.parents_only}
                       onChange={() => setProoftransOption({ ...prooftransOption, parents_only: !prooftransOption.parents_only })}
                       className="d-inline-block me-2"
-                  />
+                    />
                   )}
                   {prooftransOption.expand !== undefined && (
                     <Form.Check
@@ -264,7 +308,7 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
                       checked={prooftransOption.expand}
                       onChange={() => setProoftransOption({ ...prooftransOption, expand: !prooftransOption.expand })}
                       className="d-inline-block me-2"
-                  />
+                    />
                   )}
                   {prooftransOption.renumber !== undefined && (
                     <Form.Check
@@ -273,54 +317,72 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
                       checked={prooftransOption.renumber}
                       onChange={() => setProoftransOption({ ...prooftransOption, renumber: !prooftransOption.renumber })}
                       className="d-inline-block me-2"
-                  />
+                    />
                   )}
                   {prooftransOption.striplabels !== undefined && (
                     <Form.Check
-                    type="checkbox"
-                    label="Strip Labels"
-                    checked={prooftransOption.striplabels}
-                    onChange={() => setProoftransOption({ ...prooftransOption, striplabels: !prooftransOption.striplabels })}
+                      type="checkbox"
+                      label="Strip Labels"
+                      checked={prooftransOption.striplabels}
+                      onChange={() => setProoftransOption({ ...prooftransOption, striplabels: !prooftransOption.striplabels })}
                       className="d-inline-block me-2"
                     />
                   )}
-                  {/*prooftransOption.format === 'hints' && (
-                    <Form.Control
-                      type="text"
-                      placeholder="Label for hints"
-                      value={prooftransLabel}
-                      onChange={(e) => setProoftransLabel(e.target.value)}
-                      size="sm"
-                      style={{ width: '150px', display: 'inline-block' }}
-                    />
-                  )*/}
                 </div>
                 <Button variant="outline-success" size="sm" onClick={formatProver9Output}>
                   Translate
                 </Button>
               </>
-            )}
-            {selectedProcess.program === 'mace4' && (
-              <>
-                <Form.Select 
-                  size="sm"
-                  value={selectedFormat}
-                  onChange={(e) => setSelectedFormat(e.target.value)}
-                  style={{ width: 'auto', display: 'inline-block', marginLeft: '10px' }}
-                >
-                  {INTERP_FORMATS.map(format => (
-                    <option key={format.value} value={format.value} title={format.doc}>
-                      {format.label}
-                    </option>
-                  ))}
-                </Form.Select>
-                <Button variant="outline-success" size="sm" onClick={formatMace4Output}>
-                  Format Output
-                </Button>
-              </>
-            )}
-          </ButtonGroup>
-        </div>
+              </ButtonGroup>
+          </div>
+        )}
+
+        {selectedProcess.program === 'mace4' && (
+          <div className="mb-3">
+            <ButtonGroup>
+              <Button variant="outline-primary" size="sm" onClick={downloadOutput}>
+                Download
+              </Button>
+              <Form.Select 
+                size="sm"
+                value={selectedFormat}
+                onChange={(e) => setSelectedFormat(e.target.value)}
+                style={{ width: 'auto', display: 'inline-block' }}
+              >
+                {INTERP_FORMATS.map(format => (
+                  <option key={format.value} value={format.value} title={format.doc}>
+                    {format.label}
+                  </option>
+                ))}
+              </Form.Select>
+              <Button variant="outline-success" size="sm" onClick={formatMace4Output}>
+                Format Output
+              </Button>
+            </ButtonGroup>
+
+            <ButtonGroup>
+              <div className="ms-2 d-inline-block">
+                <Form.Check
+                  type="checkbox"
+                  label="Wrap"
+                  checked={isofilterOptions.wrap}
+                  onChange={() => setIsofilterOptions({ ...isofilterOptions, wrap: !isofilterOptions.wrap })}
+                  className="d-inline-block me-2"
+                />
+                <Form.Check
+                  type="checkbox"
+                  label="Ignore Constants"
+                  checked={isofilterOptions.ignore_constants}
+                  onChange={() => setIsofilterOptions({ ...isofilterOptions, ignore_constants: !isofilterOptions.ignore_constants })}
+                  className="d-inline-block me-2"
+                />
+              </div>
+              <Button variant="outline-info" size="sm" onClick={filterModels}>
+                Filter Models
+              </Button>
+            </ButtonGroup>
+          </div>
+        )}
         
         <div className="output-container">
           <h5>Output</h5>

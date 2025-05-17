@@ -121,16 +121,16 @@ def parse_string(input_string: str) -> ParseOutput:
             option_name = item[1]
             option_value = item[2]
             if current_program == "prover9":
-                parameter = getattr(parsed.prover9_options, option_name)
-                if parameter:
+                try:
+                    parameter = getattr(parsed.prover9_options, option_name)
                     parameter.value = option_value
-                else:
+                except AttributeError:
                     parsed.prover9_options.extra_parameters.append(Parameter(name=option_name, value=option_value))
             elif current_program == "mace4":
-                parameter = getattr(parsed.mace4_options, option_name)
-                if parameter:
+                try:
+                    parameter = getattr(parsed.mace4_options, option_name)
                     parameter.value = option_value
-                else:
+                except AttributeError:
                     parsed.mace4_options.extra_parameters.append(Parameter(name=option_name, value=option_value))
             else:
                 parsed.global_parameters.append(Parameter(name=option_name, value=option_value))
