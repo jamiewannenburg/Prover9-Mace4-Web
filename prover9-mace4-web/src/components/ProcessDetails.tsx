@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Button, ButtonGroup, Form } from 'react-bootstrap';
-import { Process, INTERP_FORMATS, InterpFormat } from '../types';
+import { Process, INTERP_FORMATS, InterpFormat, ProoftransOption, PROOFTRANS_OPTIONS } from '../types';
 import { formatDuration } from '../utils';
 
 interface ProcessDetailsProps {
@@ -12,6 +12,8 @@ interface ProcessDetailsProps {
 const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, apiUrl }) => {
   const [output, setOutput] = useState<string>('');
   const [selectedFormat, setSelectedFormat] = useState<string>('standard');
+  const [prooftransOption, setProoftransOption] = useState<ProoftransOption>(PROOFTRANS_OPTIONS[0]);
+  // const [prooftransLabel, setProoftransLabel] = useState<string>('');
   
   const selectedProcess = processes.find(p => p.id === processId);
   
@@ -77,13 +79,39 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
     if (!processId) return;
     
     try {
-      const response = await fetch(`${apiUrl}/format_prover9_output/${processId}`, {
+      const response = await fetch(`${apiUrl}/start`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          program: 'prooftrans',
+          input: output,
+          options: {
+            format: prooftransOption.format,
+          },
+          ...(prooftransOption.parents_only && { parents_only: true }),
+          ...(prooftransOption.expand && { expand: true }),
+          ...(prooftransOption.renumber && { renumber: true }),
+          ...(prooftransOption.striplabels && { striplabels: true }),
+          //...(prooftransOptions.hints && prooftransLabel ? { label: prooftransLabel } : {})
+        }),
       });
       
       if (response.ok) {
+        // Process started successfully
         const data = await response.json();
-        setOutput(data.formatted_output || 'No formatted output available');
+        // Start polling for the new process output
+        const pollInterval = setInterval(async () => {
+          const statusResponse = await fetch(`${apiUrl}/status/${data.process_id}`);
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            if (statusData.state === 'done') {
+              setOutput(statusData.output || 'No formatted output available');
+              clearInterval(pollInterval);
+            }
+          }
+        }, 1000);
       } else {
         alert('Failed to format output');
       }
@@ -185,6 +213,13 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
     return info.join('\n');
   };
 
+  // const handleProoftransOptionChange = (option: ProoftransOptions) => {
+  //   setProoftransOptions(prev => ({
+  //     ...prev,
+  //     [option]: !prev[option]
+  //   }));
+  // };
+
   return (
     <Card>
       <Card.Body>
@@ -199,9 +234,71 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
               Download
             </Button>
             {selectedProcess.program === 'prover9' && (
-              <Button variant="outline-success" size="sm" onClick={formatProver9Output}>
-                Format Output
-              </Button>
+              <>
+                <Form.Select 
+                  size="sm"
+                  value={prooftransOption.format}
+                  onChange={(e) => setProoftransOption(PROOFTRANS_OPTIONS.find(opt => opt.format === e.target.value) || PROOFTRANS_OPTIONS[0])}
+                  style={{ width: 'auto', display: 'inline-block', marginLeft: '10px' }}
+                >
+                  {PROOFTRANS_OPTIONS.map(option => (
+                    <option key={option.format} value={option.format} title={option.doc}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Form.Select>
+                <div className="ms-2 d-inline-block">
+                  {prooftransOption.parents_only !== undefined && (
+                    <Form.Check
+                      type="checkbox"
+                      label="Parents Only"
+                      checked={prooftransOption.parents_only}
+                      onChange={() => setProoftransOption({ ...prooftransOption, parents_only: !prooftransOption.parents_only })}
+                      className="d-inline-block me-2"
+                  />
+                  )}
+                  {prooftransOption.expand !== undefined && (
+                    <Form.Check
+                      type="checkbox"
+                      label="Expand"
+                      checked={prooftransOption.expand}
+                      onChange={() => setProoftransOption({ ...prooftransOption, expand: !prooftransOption.expand })}
+                      className="d-inline-block me-2"
+                  />
+                  )}
+                  {prooftransOption.renumber !== undefined && (
+                    <Form.Check
+                      type="checkbox"
+                      label="Renumber"
+                      checked={prooftransOption.renumber}
+                      onChange={() => setProoftransOption({ ...prooftransOption, renumber: !prooftransOption.renumber })}
+                      className="d-inline-block me-2"
+                  />
+                  )}
+                  {prooftransOption.striplabels !== undefined && (
+                    <Form.Check
+                    type="checkbox"
+                    label="Strip Labels"
+                    checked={prooftransOption.striplabels}
+                    onChange={() => setProoftransOption({ ...prooftransOption, striplabels: !prooftransOption.striplabels })}
+                      className="d-inline-block me-2"
+                    />
+                  )}
+                  {/*prooftransOption.format === 'hints' && (
+                    <Form.Control
+                      type="text"
+                      placeholder="Label for hints"
+                      value={prooftransLabel}
+                      onChange={(e) => setProoftransLabel(e.target.value)}
+                      size="sm"
+                      style={{ width: '150px', display: 'inline-block' }}
+                    />
+                  )*/}
+                </div>
+                <Button variant="outline-success" size="sm" onClick={formatProver9Output}>
+                  Translate
+                </Button>
+              </>
             )}
             {selectedProcess.program === 'mace4' && (
               <>

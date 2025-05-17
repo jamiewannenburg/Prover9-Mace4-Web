@@ -65,6 +65,51 @@ export const INTERP_FORMATS: InterpFormat[] = [
   }
 ]
 
+
+export interface ProoftransOption {
+  format: string;
+  label: string;
+  doc: string;
+  parents_only?: boolean;
+  expand?: boolean;
+  renumber?: boolean;
+  striplabels?: boolean;
+  //label_option?: string;
+}
+
+export const PROOFTRANS_OPTIONS: ProoftransOption[] = [
+  {
+    format: "",
+    label: "Default",
+    doc: "If no additional argument is given, Prooftrans simply extracts the proof from the Prover9 output file.",
+    parents_only: false,
+    expand: false,
+    renumber: false,
+    striplabels: false,
+  },
+  {
+    format: "xml",
+    label: "XML",
+    doc: "Tell Prooftrans to produce proofs in XML. ",
+    expand: false,
+    renumber: false,
+  },
+  {
+    format: "ivy",
+    label: "Ivy",
+    doc: "Tell Prooftrans to produce proofs in Ivy format tell Prooftrans to produce very detailed proofs that can be checked with the Ivy proof checker.",
+    renumber: false,
+  },
+  {
+    format: "hints",
+    label: "Hints",
+    doc: "The option hints tells Prooftrans to take all of the proofs in the file and produce one list of hints that can be given to Prover9 to guide subsequent searches on related conjectures.",
+    expand: false,
+    striplabels: false,
+    //label_option: "hints",
+  }
+];
+
 export enum SymbolType {
   INFIX = "infix",
   INFIX_LEFT = "infix_left",
