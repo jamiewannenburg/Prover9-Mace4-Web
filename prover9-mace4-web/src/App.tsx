@@ -61,14 +61,28 @@ function App() {
         return;
       }
       
-      const data = await response.json();
-      if (!Array.isArray(data)) {
-        console.error('Invalid response format:', data);
+      const processIds = await response.json();
+      if (!Array.isArray(processIds)) {
+        console.error('Invalid response format:', processIds);
         setError('Invalid response format from API');
         return;
       }
-      
-      setProcesses(data);
+
+      // Fetch full details for each process
+      const processDetails = await Promise.all(
+        processIds.map(async (id) => {
+          const detailResponse = await fetch(`${apiUrl}/status/${id}`);
+          if (detailResponse.ok) {
+            return detailResponse.json();
+          }
+          console.error(`Failed to fetch details for process ${id}`);
+          return null;
+        })
+      );
+
+      // Filter out any failed fetches and update state
+      const validProcesses = processDetails.filter((p): p is Process => p !== null);
+      setProcesses(validProcesses);
     } catch (err) {
       console.error('API Error:', {
         url: processUrl,

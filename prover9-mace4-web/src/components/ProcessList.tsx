@@ -93,15 +93,15 @@ const ProcessList: React.FC<ProcessListProps> = ({
   const getStatusBadge = (state: string) => {
     switch (state) {
       case 'running':
-        return <Badge bg="success">Running</Badge>;
+        return <Badge key="running" bg="success">Running</Badge>;
       case 'completed':
-        return <Badge bg="primary">Completed</Badge>;
+        return <Badge key="completed" bg="primary">Completed</Badge>;
       case 'failed':
-        return <Badge bg="danger">Failed</Badge>;
+        return <Badge key="failed" bg="danger">Failed</Badge>;
       case 'paused':
-        return <Badge bg="warning">Paused</Badge>;
+        return <Badge key="paused" bg="warning">Paused</Badge>;
       default:
-        return <Badge bg="secondary">{state}</Badge>;
+        return <Badge key={state} bg="secondary">{state}</Badge>;
     }
   };
 
@@ -127,13 +127,13 @@ const ProcessList: React.FC<ProcessListProps> = ({
         </thead>
         <tbody>
           {processes.length === 0 ? (
-            <tr>
+            <tr key="processempty-state">
               <td colSpan={5} className="text-center">No processes running</td>
             </tr>
           ) : (
             processes.map(process => (
               <tr 
-                key={process.id} 
+                key={`process-${process.id}`} 
                 className={selectedProcess === process.id ? 'table-active' : ''}
                 onClick={() => onSelectProcess(process.id)}
               >
@@ -144,21 +144,37 @@ const ProcessList: React.FC<ProcessListProps> = ({
                 <td>
                   <ButtonGroup size="sm">
                     {process.state === ProcessState.RUNNING && (
-                      <Button variant="warning" onClick={(e) => { e.stopPropagation(); pauseProcess(process.id); }}>
+                      <Button 
+                        key="pause"
+                        variant="warning" 
+                        onClick={(e) => { e.stopPropagation(); pauseProcess(process.id); }}
+                      >
                         Pause
                       </Button>
                     )}
                     {process.state === ProcessState.SUSPENDED && (
-                      <Button variant="success" onClick={(e) => { e.stopPropagation(); resumeProcess(process.id); }}>
+                      <Button 
+                        key="resume"
+                        variant="success" 
+                        onClick={(e) => { e.stopPropagation(); resumeProcess(process.id); }}
+                      >
                         Resume
                       </Button>
                     )}
                     {process.state === ProcessState.RUNNING && (
-                      <Button variant="danger" onClick={(e) => { e.stopPropagation(); killProcess(process.id); }}>
+                      <Button 
+                        key="kill"
+                        variant="danger" 
+                        onClick={(e) => { e.stopPropagation(); killProcess(process.id); }}
+                      >
                         Kill
                       </Button>
                     )}
-                    <Button variant="secondary" onClick={(e) => { e.stopPropagation(); removeProcess(process.id); }}>
+                    <Button 
+                      key="remove"
+                      variant="secondary" 
+                      onClick={(e) => { e.stopPropagation(); removeProcess(process.id); }}
+                    >
                       Remove
                     </Button>
                   </ButtonGroup>

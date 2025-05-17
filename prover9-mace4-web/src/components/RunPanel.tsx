@@ -25,7 +25,7 @@ const SampleTree: React.FC<SampleTreeProps> = ({ nodes, onSelectFile, level = 0 
   return (
     <ul style={{ paddingLeft: level * 16, listStyle: 'none', margin: 0 }}>
       {nodes.map((node) => (
-        <li key={node.path}>
+        <li key={`${node.path}-${level}`}>
           {node.type === 'directory' ? (
             <>
               <div
