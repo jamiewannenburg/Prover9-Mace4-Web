@@ -14,7 +14,7 @@ services:
 
   gui:
     build:
-      context: ./prover9-mace4-web
+      context: ./prover9-mace4-gui
       dockerfile: Dockerfile
     ports:
       - "127.0.0.1:80:80"
