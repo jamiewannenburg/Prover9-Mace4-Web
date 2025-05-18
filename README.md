@@ -30,7 +30,7 @@ services:
     environment:
       - PYTHONPATH=/app
     restart: unless-stopped
-   gui:
+  gui:
     image: docker.io/jamiewannenburg/prover9-mace4-web-gui:latest
     container_name: prover9-mace4-web-gui
     ports:
