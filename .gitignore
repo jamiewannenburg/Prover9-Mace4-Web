@@ -9,3 +9,5 @@ venv/
 .env
 *.code-workspace
 .pytest_cache/
+**/__pycache__
+**/node_modules
