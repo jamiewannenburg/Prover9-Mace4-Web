@@ -24,11 +24,13 @@ from p9m4_types import (
 from parse import parse_string
 from parse import generate_input as p9m4_generate_input
 from pyparsing import ParseException
+# TODO should not need process_lock any more
 from process_handler import (
-    processes, process_lock,
-    run_program, binary_ok, get_program_path, get_process_stats,
+    process_lock, processes,
+    run_program, 
     #get_prover9_stats, get_mace4_stats, get_isofilter_stats
     #, process_outputs
+    processes
 )
 
 # Constants
@@ -45,6 +47,33 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up processes and close the shelve database when the application shuts down."""
+    #with process_lock:
+    # Kill any running processes
+    for process_id in processes:
+        process_info = processes[str(process_id)]
+        if process_info.state in [ProcessState.RUNNING, ProcessState.SUSPENDED, ProcessState.READY]:
+            try:
+                if os.name == 'nt':
+                    os.kill(process_info.pid, signal.SIGINT)
+                else:
+                    os.kill(process_info.pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass  # Process might already be gone
+            
+            # # Clean up files
+            # if process_info.fin_path and os.path.exists(process_info.fin_path):
+            #     os.unlink(process_info.fin_path)
+            # if process_info.fout_path and os.path.exists(process_info.fout_path):
+            #     os.unlink(process_info.fout_path)
+            # if process_info.ferr_path and os.path.exists(process_info.ferr_path):
+            #     os.unlink(process_info.ferr_path)
+    
+    # Close the shelve database
+    processes.close()
 
 @app.post("/start")
 async def start_program(input: ProgramInput, background_tasks: BackgroundTasks) -> Dict:
@@ -63,7 +92,7 @@ async def start_program(input: ProgramInput, background_tasks: BackgroundTasks) 
 
     # Add to tracking
     with process_lock:
-        processes[process_id] = process_info
+        processes[str(process_id)] = process_info
 
     # Start process in background
     background_tasks.add_task(run_program, input.program, input.input, process_id, input.options)
@@ -74,42 +103,42 @@ async def start_program(input: ProgramInput, background_tasks: BackgroundTasks) 
 async def get_status(process_id: int) -> ProcessInfo:
     """Get the status of a process"""
     with process_lock:
-        if process_id not in processes:
+        if str(process_id) not in processes:
             raise HTTPException(status_code=404, detail="Process not found")
-        return processes[process_id]
+        return processes[str(process_id)]
 
 @app.get("/processes")
 async def list_processes() -> List[int]:
     """List all tracked processes"""
     with process_lock:
-        return list(processes.keys())
+        return [int(process_id) for process_id in processes]
 
 @app.post("/kill/{process_id}")
 async def kill_process(process_id: int) -> Dict:
     """Kill a running process"""
     with process_lock:
-        if process_id not in processes:
+        if str(process_id) not in processes:
             raise HTTPException(status_code=404, detail="Process not found")
         
-        process_info = processes[process_id]
-        if process_info.state not in [ProcessState.RUNNING, ProcessState.SUSPENDED]:
+        process_info = processes[str(process_id)]
+        if process_info.state not in [ProcessState.RUNNING, ProcessState.SUSPENDED, ProcessState.READY]:
             raise HTTPException(status_code=400, detail="Process is not running or suspended")
         
         if os.name == 'nt':
             os.kill(process_info.pid, signal.SIGINT)
         else:
             os.kill(process_info.pid, signal.SIGKILL)
-        process_info.state = ProcessState.KILLED
+        processes[str(process_id)].state = ProcessState.KILLED
         return {"status": "success", "message": f"Process {process_id} killed"}
 
 @app.get('/download/{process_id}')
 async def download_process(process_id: int) -> StreamingResponse:
     """Download the output of a process"""
     with process_lock:
-        if process_id not in processes:
+        if str(process_id) not in processes:
             raise HTTPException(status_code=404, detail="Process not found")
             
-        process_info = processes[process_id]
+        process_info = processes[str(process_id)]
         if not process_info.fout_path:
             raise HTTPException(status_code=404, detail="Process output file not found")
         
@@ -139,10 +168,10 @@ async def download_process(process_id: int) -> StreamingResponse:
 async def get_process_output(process_id: int, page: Optional[int] = None, page_size: Optional[int] = None) -> ProcessOutput:
     """Get the output of a process with optional pagination"""
     with process_lock:
-        if process_id not in processes:
+        if str(process_id) not in processes:
             raise HTTPException(status_code=404, detail="Process not found")
         
-        process_info = processes[process_id]
+        process_info = processes[str(process_id)]
         if not process_info.fout_path:
             raise HTTPException(status_code=404, detail="Process output file not found")
         
@@ -190,10 +219,10 @@ async def get_process_output(process_id: int, page: Optional[int] = None, page_s
 async def remove_process(process_id: int) -> Dict:
     """Remove a completed process from the list"""
     with process_lock:
-        if process_id not in processes:
+        if str(process_id) not in processes:
             raise HTTPException(status_code=404, detail="Process not found")
         
-        process_info = processes[process_id]
+        process_info = processes[str(process_id)]
         if process_info.state not in [ProcessState.DONE, ProcessState.ERROR, ProcessState.KILLED]:
             raise HTTPException(status_code=400, detail="Can only remove completed, errored, or killed processes")
         
@@ -204,8 +233,8 @@ async def remove_process(process_id: int) -> Dict:
             os.unlink(process_info.fout_path)
         if process_info.ferr_path and os.path.exists(process_info.ferr_path):
             os.unlink(process_info.ferr_path)
-        
-        # del processes[process_id]
+
+        del processes[str(process_id)]
         # if process_id in process_outputs:
         #     del process_outputs[process_id]
         return {"status": "success", "message": f"Process {process_id} removed"}
@@ -214,17 +243,17 @@ async def remove_process(process_id: int) -> Dict:
 async def pause_process(process_id: int) -> Dict:
     """Pause a running process"""
     with process_lock:
-        if process_id not in processes:
+        if str(process_id) not in processes:
             raise HTTPException(status_code=404, detail="Process not found")
         
-        process_info = processes[process_id]
+        process_info = processes[str(process_id)]
         if process_info.state != ProcessState.RUNNING:
             raise HTTPException(status_code=400, detail="Process is not running")
         # windows cannot pause a process
         if os.name == 'nt':
             raise HTTPException(status_code=400, detail="Windows cannot pause a process")
         # Update state and send signal
-        process_info.state = ProcessState.SUSPENDED
+        processes[str(process_id)].state = ProcessState.SUSPENDED
         os.kill(process_info.pid, signal.SIGSTOP)
         return {"status": "success", "message": "Process paused"}
 
@@ -232,17 +261,17 @@ async def pause_process(process_id: int) -> Dict:
 async def resume_process(process_id: int) -> Dict:
     """Resume a paused process"""
     with process_lock:
-        if process_id not in processes:
+        if str(process_id) not in processes:
             raise HTTPException(status_code=404, detail="Process not found")
         
-        process_info = processes[process_id]
+        process_info = processes[str(process_id)]
         if process_info.state != ProcessState.SUSPENDED:
             raise HTTPException(status_code=400, detail="Process is not paused")
         # windows cannot resume a process
         if os.name == 'nt':
             raise HTTPException(status_code=400, detail="Windows cannot resume a process")
         # Update state and send signal
-        process_info.state = ProcessState.RUNNING
+        processes[str(process_id)].state = ProcessState.RUNNING
         os.kill(process_info.pid, signal.SIGCONT)
         return {"status": "success", "message": "Process resumed"}
 
@@ -296,8 +325,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--host", type=str, default="localhost")
-    parser.add_argument("--reload", action="store_false")
-    parser.add_argument("--debug", action="store_false")
+    parser.add_argument("--reload", action="store_true")
+    parser.add_argument("--debug", action="store_true")
     parser.add_argument("--production", action="store_true")
     args = parser.parse_args()
     import uvicorn

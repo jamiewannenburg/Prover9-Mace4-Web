@@ -13,16 +13,25 @@ import threading
 import psutil
 from typing import Dict, Optional, Union
 from datetime import datetime
+#from persistqueue import PDict
+import shelve
 
 from p9m4_types import (
     ProgramType, ProcessInfo, ProcessState
 )
 from parse import manual_standardize_mace4_output
+from sync_lock import SyncLock
 
 # Global process tracking
-processes: Dict[int, ProcessInfo] = {}
+
+PROCESS_QUEUE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+os.makedirs(PROCESS_QUEUE_PATH, exist_ok=True)
+#processes: Dict[int, ProcessInfo] = PDict(PROCESS_QUEUE_PATH,'processes')
+processes = shelve.open(os.path.join(PROCESS_QUEUE_PATH,'processes'),writeback=True)
 #process_outputs: Dict[int, str] = {}  # Store outputs separately
-process_lock = threading.Lock()
+#process_lock = threading.Lock()
+process_lock = SyncLock(processes)
+
 
 def binary_ok(fullpath: str) -> bool:
     """Check if binary exists and is executable"""
@@ -110,8 +119,8 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
     program_path = get_program_path(program)
     if not program_path or not binary_ok(program_path):
         with process_lock:
-            processes[process_id].state = ProcessState.ERROR
-            processes[process_id].error = f"{program.value} binary not found or not executable"
+            processes[str(str(process_id))].state = ProcessState.ERROR
+            processes[str(str(process_id))].error = f"{program.value} binary not found or not executable"
         return
 
     # Create temporary files
@@ -122,7 +131,7 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
     try:
         if isinstance(input_text, int):
             # get text from process outputs
-            process_info = processes[input_text]
+            process_info = processes[str(input_text)]
             with open(process_info.fout_path, 'rb') as f:
                 input_text = f.read().decode('utf-8', errors='replace')
         # Write input to stdin
@@ -173,17 +182,17 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
 
         # Update process info
         with process_lock:
-            processes[process_id].pid = process.pid
-            processes[process_id].state = ProcessState.RUNNING
-            processes[process_id].fin_path = fin.name
-            processes[process_id].fout_path = fout.name
-            processes[process_id].ferr_path = ferr.name
+            processes[str(process_id)].pid = process.pid
+            processes[str(process_id)].state = ProcessState.RUNNING
+            processes[str(process_id)].fin_path = fin.name
+            processes[str(process_id)].fout_path = fout.name
+            processes[str(process_id)].ferr_path = ferr.name
 
         # Monitor process
         while process.poll() is None:
             # Update resource usage
             with process_lock:
-                processes[process_id].resource_usage = get_process_stats(process.pid)
+                processes[str(process_id)].resource_usage = get_process_stats(process.pid)
             
                 fout.seek(0)  # rewind
                 # iterate over lines
@@ -213,9 +222,9 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
                 if domain_size > 0:
                     stats = f"Domain size: {domain_size}\n{stats}"
 
-                processes[process_id].stats = stats
+                processes[str(process_id)].stats = stats
             # Check if process was killed
-            if processes[process_id].state == ProcessState.KILLED:
+            if processes[str(process_id)].state == ProcessState.KILLED:
                 process.terminate()
                 break
 
@@ -230,15 +239,15 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
 
         # Update process info
         with process_lock:
-            processes[process_id].exit_code = exit_code
-            processes[process_id].error = error
-            processes[process_id].state = ProcessState.DONE
+            processes[str(process_id)].exit_code = exit_code
+            processes[str(process_id)].error = error
+            processes[str(process_id)].state = ProcessState.DONE
             #process_outputs[process_id] = output  # Store output separately
 
     except Exception as e:
         with process_lock:
-            processes[process_id].state = ProcessState.ERROR
-            processes[process_id].error = str(e)
+            processes[str(process_id)].state = ProcessState.ERROR
+            processes[str(process_id)].error = str(e)
         # Cleanup files on error
         fin.close()
         fout.close()
@@ -246,3 +255,10 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
         os.unlink(fin.name)
         os.unlink(fout.name)
         os.unlink(ferr.name) 
+
+def rerun_processes():
+    """Rerun processes that are still running after a restart"""
+    for process_id, process_info in processes.items():
+        if process_info.state == ProcessState.RUNNING:
+            run_program(process_info.program, process_info.input, int(process_id), process_info.options)
+rerun_processes()

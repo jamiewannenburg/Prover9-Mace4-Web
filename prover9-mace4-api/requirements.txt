@@ -11,3 +11,4 @@ dotenv>=0.9.0
 psutil>=5.8.0
 pillow>=10.0.0
 websockets>=10.0
+persist-queue>=0.8.0

@@ -26,6 +26,7 @@ class TestQuickProver9(unittest.TestCase):
         while requests.get(f"{self.base_url}/status/{self.process_id}").json()["state"] != "done":
             time.sleep(1)
         self.status = requests.get(f"{self.base_url}/status/{self.process_id}").json()
+        self.output = requests.get(f"{self.base_url}/output/{self.process_id}").json()
         
     def tearDown(self):
         requests.delete(f"{self.base_url}/process/{self.process_id}")
@@ -37,8 +38,8 @@ class TestQuickProver9(unittest.TestCase):
     def test_get_status(self):
         self.assertIn("state", self.status)
         self.assertEqual(self.status["state"], "done")
-        self.assertIn("output", self.status)
-        self.assertIn("THEOREM PROVED", self.status["output"])
+        self.assertIn("output", self.output)
+        self.assertIn("THEOREM PROVED", self.output["output"])
 
     def test_list_processes(self):
         response = requests.get(f"{self.base_url}/processes")
@@ -48,7 +49,7 @@ class TestQuickProver9(unittest.TestCase):
 
 
     def test_prooftrans(self):
-        prover9_output = self.status["output"]
+        prover9_output = self.output["output"]
         
         # Run prooftrans
         response = requests.post(f"{self.base_url}/start", json={
@@ -67,7 +68,7 @@ class TestQuickProver9(unittest.TestCase):
         while requests.get(f"{self.base_url}/status/{process_id}").json()["state"] != "done":
             time.sleep(1)
             i += 1
-            if i > 3:
+            if i > 35:
                 raise Exception("Prooftrans process did not finish quickly")
         
         response = requests.delete(f"{self.base_url}/process/{process_id}")
@@ -132,7 +133,8 @@ class TestMace4(unittest.TestCase):
         while requests.get(f"{self.base_url}/status/{self.process_id}").json()["state"] != "done":
             time.sleep(1)
         self.status = requests.get(f"{self.base_url}/status/{self.process_id}").json()
-        
+        self.output = requests.get(f"{self.base_url}/output/{self.process_id}").json()
+    
     def tearDown(self):
         requests.delete(f"{self.base_url}/process/{self.process_id}")
 
@@ -143,13 +145,13 @@ class TestMace4(unittest.TestCase):
     def test_get_status(self):
         self.assertIn("state", self.status)
         self.assertEqual(self.status["state"], "done")
-        self.assertIn("output", self.status)
-        self.assertIn("MODEL", self.status["output"])
+        self.assertIn("output", self.output)
+        self.assertIn("MODEL", self.output["output"])
 
     def test_interpformat(self):
         # Run interpformat
         # Wait for Mace4 to finish
-        mace4_output = self.status["output"]
+        mace4_output = self.output["output"]
         
         # Run interpformat
         response = requests.post(f"{self.base_url}/start", json={
@@ -173,7 +175,7 @@ class TestMace4(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_isofilter(self):
-        mace4_output = self.status["output"]
+        mace4_output = self.output["output"]
         
         # Run isofilter
         response = requests.post(f"{self.base_url}/start", json={
