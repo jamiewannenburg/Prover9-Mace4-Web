@@ -50,8 +50,9 @@ The application can be run using Docker and docker-compose. The setup includes b
 
 1. Make sure Docker and docker-compose are installed on your system
 
-2. Build and run the container:
+2. Build and run the container, first check the `docker-compose.yml` to set the correct `PROVER9_API_URL` environment variable which is forwarded to `/api` endpoint:
 ```bash
+cd prover9-mace4-api
 docker compose up
 ```
 Or build explicitly:
@@ -62,9 +63,8 @@ cd prover9-mace4-api
 docker build -t prover9-mace4-web-gui .
 
 # Run the container
-docker run -p 80:80 -d prover9-mace4-web-gui
+docker run -p 80:80 -e PROVER9_API_URL="http://localhost:8000" -d prover9-mace4-web-gui
 ```
-
 
 To host your own:
 
@@ -73,7 +73,6 @@ docker login
 docker tag prover9-mace4-web-gui yourusername/prover9-mace4-web-gui:latest
 docker push yourusername/prover9-mace4-web-gui:latest
 ```
-
 
 3. Access the application at [http://localhost](http://localhost)
 

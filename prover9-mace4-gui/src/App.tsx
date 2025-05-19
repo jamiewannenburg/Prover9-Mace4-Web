@@ -25,18 +25,12 @@ const BANNER = `${PROGRAM_NAME} Version ${PROGRAM_VERSION}, ${PROGRAM_DATE}`;
 
 function App() {
   const [apiUrl, setApiUrl] = useState<string>(() => {
-    return localStorage.getItem('prover9_api_url') || process.env.REACT_APP_API_URL ||'http://localhost:8000';
+    return localStorage.getItem('prover9_api_url') || process.env.REACT_APP_API_URL ||'/api';
   });
   const [processes, setProcesses] = useState<Process[]>([]);
   const [selectedProcess, setSelectedProcess] = useState<number | null>(null);
   const [apiConfigured, setApiConfigured] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-
-  const saveApiUrl = (url: string) => {
-    localStorage.setItem('prover9_api_url', url);
-    setApiUrl(url);
-    setApiConfigured(true);
-  };
 
   // Handle page refresh
   useEffect(() => {
@@ -64,6 +58,12 @@ function App() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, []);
+
+  const saveApiUrl = (url: string) => {
+    localStorage.setItem('prover9_api_url', url);
+    setApiUrl(url);
+    setApiConfigured(true);
+  };
 
   useEffect(() => {
     const storedUrl = localStorage.getItem('prover9_api_url');

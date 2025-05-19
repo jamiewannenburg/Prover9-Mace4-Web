@@ -20,7 +20,7 @@ const ApiConfig: React.FC<ApiConfigProps> = ({ onSave, initialValue }) => {
         <Card.Body>
           <Card.Title>API Configuration</Card.Title>
           <Card.Text>
-            To avoid this screen, set the <code>PROVER9_API_URL</code> environment variable.
+            To avoid this screen, set the <code>REACT_APP_API_URL</code> environment variable.
           </Card.Text>
           <Form onSubmit={handleSubmit}>
             <Form.Group className="mb-3">

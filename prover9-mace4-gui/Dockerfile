@@ -18,11 +18,14 @@ RUN npm run build
 # Production stage
 FROM nginx:stable-alpine
 
+# Set API URL to the port forwarded from the API container
+ENV REACT_APP_API_URL=/api
+
 # Copy built assets from the builder stage
 COPY --from=builder /app/build /usr/share/nginx/html
 
-# Copy custom nginx config (if needed)
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy custom nginx config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Expose port
 EXPOSE 80

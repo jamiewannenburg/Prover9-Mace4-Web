@@ -59,4 +59,4 @@ USER apps
 EXPOSE 8000
 
 # The actual command will be specified in docker-compose.yml
-CMD ["python", "api_server.py"] 
+CMD ["python", "api_server.py", "--production"] 

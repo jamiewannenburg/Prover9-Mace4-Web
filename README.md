@@ -23,8 +23,6 @@ services:
     image: docker.io/jamiewannenburg/prover9-mace4-web-api:latest
     container_name: prover9-mace4-web-api
     command: python api_server.py --production --host 0.0.0.0 --port 8000
-    ports:
-      - "127.0.0.1:8000:8000"
     expose:
       - "8000"
     environment:
@@ -34,13 +32,9 @@ services:
     image: docker.io/jamiewannenburg/prover9-mace4-web-gui:latest
     container_name: prover9-mace4-web-gui
     ports:
-      - "127.0.0.1:80:80"
-    expose:
-      - "80"
+      - "80:80""
     depends_on:
       - api
-    environment:
-      - REACT_APP_API_URL=http://127.0.0.1:8000
     restart: unless-stopped 
 ```
 
