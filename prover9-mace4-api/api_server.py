@@ -16,13 +16,14 @@ import threading
 import psutil
 from typing import Dict, List, Optional, Union, Set, Tuple, Literal
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from p9m4_types import (
     ProgramInput, ParseInput, ParseOutput, ProgramType, ProcessInfo, 
-    ProcessState, GuiOutput,  Parameter, Flag, Mace4Options, Prover9Options
+    ProcessState, GuiOutput,  ProcessOutput, Parameter, Flag, Mace4Options, Prover9Options
 )
 
 from parse import parse_string
@@ -34,6 +35,7 @@ BIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin')
 
 # Global process tracking
 processes: Dict[int, ProcessInfo] = {}
+process_outputs: Dict[int, str] = {}  # Store outputs separately
 process_lock = threading.Lock()
 
 # Utility functions
@@ -218,9 +220,9 @@ def run_program(program: ProgramType, input_text: str, process_id: int, options:
         # Update process info
         with process_lock:
             processes[process_id].exit_code = exit_code
-            processes[process_id].output = output
             processes[process_id].error = error
             processes[process_id].state = ProcessState.DONE
+            process_outputs[process_id] = output  # Store output separately
             
             # Update statistics
             if program == ProgramType.PROVER9:
@@ -304,6 +306,49 @@ async def kill_process(process_id: int) -> Dict:
         process_info.state = ProcessState.KILLED
         return {"status": "success", "message": f"Process {process_id} killed"}
 
+@app.get("/process/{process_id}")
+async def get_process_output(process_id: int, page: Optional[int] = None, page_size: Optional[int] = None) -> Union[ProcessOutput, StreamingResponse]:
+    """Get the output of a process with optional pagination"""
+    with process_lock:
+        if process_id not in processes:
+            raise HTTPException(status_code=404, detail="Process not found")
+        
+        if process_id not in process_outputs:
+            raise HTTPException(status_code=404, detail="Process output not found")
+        
+        output = process_outputs[process_id]
+        
+        # If no pagination parameters are provided, stream the entire output
+        if page is None or page_size is None:
+            def generate():
+                yield output
+            return StreamingResponse(
+                generate(),
+                media_type="text/plain",
+                headers={"Content-Disposition": f"attachment; filename=process_{process_id}_output.txt"}
+            )
+        
+        # Handle pagination
+        lines = output.splitlines()
+        total_lines = len(lines)
+        
+        # Calculate pagination
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        has_more = end_idx < total_lines
+        
+        # Get the requested page of lines
+        page_lines = lines[start_idx:end_idx]
+        page_output = "\n".join(page_lines)
+        
+        return ProcessOutput(
+            output=page_output,
+            total_lines=total_lines,
+            page=page,
+            page_size=page_size,
+            has_more=has_more
+        )
+
 @app.delete("/process/{process_id}")
 async def remove_process(process_id: int) -> Dict:
     """Remove a completed process from the list"""
@@ -316,6 +361,8 @@ async def remove_process(process_id: int) -> Dict:
             raise HTTPException(status_code=400, detail="Can only remove completed, errored, or killed processes")
         
         del processes[process_id]
+        if process_id in process_outputs:
+            del process_outputs[process_id]
         return {"status": "success", "message": f"Process {process_id} removed"}
 
 @app.post("/pause/{process_id}")
@@ -354,8 +401,6 @@ async def resume_process(process_id: int) -> Dict:
         os.kill(process_info.pid, signal.SIGCONT)
         return {"status": "success", "message": "Process resumed"}
 
-
-
 @app.post("/parse")
 def parse(input: ParseInput) -> ParseOutput:
     """Parse the input to extract assumptions, goals, and options using pyparsing"""
@@ -371,7 +416,6 @@ def parse(input: ParseInput) -> ParseOutput:
 def generate_input(input: GuiOutput) -> str:
     """Generate input for Prover9/Mace4"""
     return p9m4_generate_input(input)
-
 
 # Serve static files from samples directory
 app.mount("/samples", StaticFiles(directory="samples"), name="samples")
@@ -402,7 +446,6 @@ async def list_samples() -> List[Dict]:
         return items
     
     return build_tree("samples")
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

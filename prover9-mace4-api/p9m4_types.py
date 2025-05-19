@@ -1,4 +1,3 @@
-
 from typing import Dict, List, Union, Set, Tuple, Literal, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -29,13 +28,18 @@ class ProcessInfo(BaseModel):
     state: ProcessState
     program: ProgramType
     input: str
-    output: Optional[str] = None
     error: Optional[str] = None
     exit_code: Optional[int] = None
     stats: Optional[Dict] = None
     resource_usage: Optional[Dict] = None
     options: Optional[Dict] = None
 
+class ProcessOutput(BaseModel):
+    output: str
+    total_lines: int
+    page: int
+    page_size: int
+    has_more: bool
 
 # Program exit codes
 PROGRAM_EXITS = {
