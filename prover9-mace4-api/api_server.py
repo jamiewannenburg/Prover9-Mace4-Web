@@ -25,9 +25,10 @@ from parse import parse_string
 from parse import generate_input as p9m4_generate_input
 from pyparsing import ParseException
 from process_handler import (
-    processes, process_outputs, process_lock,
+    processes, process_lock,
     run_program, binary_ok, get_program_path, get_process_stats,
-    get_prover9_stats, get_mace4_stats, get_isofilter_stats
+    #get_prover9_stats, get_mace4_stats, get_isofilter_stats
+    #, process_outputs
 )
 
 # Constants
@@ -101,31 +102,65 @@ async def kill_process(process_id: int) -> Dict:
         process_info.state = ProcessState.KILLED
         return {"status": "success", "message": f"Process {process_id} killed"}
 
+@app.get('/download/{process_id}')
+async def download_process(process_id: int) -> StreamingResponse:
+    """Download the output of a process"""
+    with process_lock:
+        if process_id not in processes:
+            raise HTTPException(status_code=404, detail="Process not found")
+            
+        process_info = processes[process_id]
+        if not process_info.fout_path:
+            raise HTTPException(status_code=404, detail="Process output file not found")
+        
+        # get the extension of the file
+        if process_info.program == ProgramType.PROVER9:
+            extension = 'proof'
+        elif process_info.program == ProgramType.MACE4:
+            extension = 'out'
+        elif process_info.program == ProgramType.ISOFILTER:
+            extension = 'model'
+        elif process_info.program == ProgramType.INTERPFORMAT:
+            extension = 'model'
+        elif process_info.program == ProgramType.PROOFTRANS:
+            extension = 'proof'
+        else:
+            extension = 'txt'
+
+        return StreamingResponse(
+            open(process_info.fout_path, 'rb'), 
+            media_type='text/plain',
+            headers={
+                'Content-Disposition': f'attachment; filename=output_{process_id}.{extension}'
+            })
+
+
 @app.get("/output/{process_id}")
-async def get_process_output(process_id: int, page: Optional[int] = None, page_size: Optional[int] = None) -> Union[ProcessOutput, StreamingResponse]:
+async def get_process_output(process_id: int, page: Optional[int] = None, page_size: Optional[int] = None) -> ProcessOutput:
     """Get the output of a process with optional pagination"""
     with process_lock:
         if process_id not in processes:
             raise HTTPException(status_code=404, detail="Process not found")
         
-        if process_id not in process_outputs:
-            raise HTTPException(status_code=404, detail="Process output not found")
+        process_info = processes[process_id]
+        if not process_info.fout_path:
+            raise HTTPException(status_code=404, detail="Process output file not found")
         
-        output = process_outputs[process_id]
+        # Get total number of lines
+        with open(process_info.fout_path, 'rb') as f:
+            total_lines = sum(1 for _ in f)
         
         # If no pagination parameters are provided, stream the entire output
         if page is None or page_size is None:
-            def generate():
-                yield output
-            return StreamingResponse(
-                generate(),
-                media_type="text/plain",
-                headers={"Content-Disposition": f"attachment; filename=process_{process_id}_output.txt"}
+            with open(process_info.fout_path, 'rb') as f:
+                output = f.read().decode('utf-8', errors='replace')
+            return ProcessOutput(
+                output=output,
+                total_lines=total_lines,
+                page=1,
+                page_size=total_lines,
+                has_more=False
             )
-        
-        # Handle pagination
-        lines = output.splitlines()
-        total_lines = len(lines)
         
         # Calculate pagination
         start_idx = (page - 1) * page_size
@@ -133,8 +168,15 @@ async def get_process_output(process_id: int, page: Optional[int] = None, page_s
         has_more = end_idx < total_lines
         
         # Get the requested page of lines
-        page_lines = lines[start_idx:end_idx]
-        page_output = "\n".join(page_lines)
+        lines = []
+        with open(process_info.fout_path, 'rb') as f:
+            for i, line in enumerate(f):
+                if i >= start_idx and i < end_idx:
+                    lines.append(line.decode('utf-8', errors='replace').rstrip('\n'))
+                elif i >= end_idx:
+                    break
+        
+        page_output = "\n".join(lines)
         
         return ProcessOutput(
             output=page_output,
@@ -155,9 +197,17 @@ async def remove_process(process_id: int) -> Dict:
         if process_info.state not in [ProcessState.DONE, ProcessState.ERROR, ProcessState.KILLED]:
             raise HTTPException(status_code=400, detail="Can only remove completed, errored, or killed processes")
         
-        del processes[process_id]
-        if process_id in process_outputs:
-            del process_outputs[process_id]
+        # Clean up files
+        if process_info.fin_path and os.path.exists(process_info.fin_path):
+            os.unlink(process_info.fin_path)
+        if process_info.fout_path and os.path.exists(process_info.fout_path):
+            os.unlink(process_info.fout_path)
+        if process_info.ferr_path and os.path.exists(process_info.ferr_path):
+            os.unlink(process_info.ferr_path)
+        
+        # del processes[process_id]
+        # if process_id in process_outputs:
+        #     del process_outputs[process_id]
         return {"status": "success", "message": f"Process {process_id} removed"}
 
 @app.post("/pause/{process_id}")

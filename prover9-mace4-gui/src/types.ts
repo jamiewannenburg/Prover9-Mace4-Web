@@ -121,27 +121,35 @@ export enum SymbolType {
   ORDINARY = "ordinary"
 }
 
+export interface ProcessOutput {
+  output: string;
+  total_lines: number;
+  page: number;
+  page_size: number;
+  has_more: boolean;
+}
+
 export interface Process {
   id: number;
   program: ProgramType;
   state: ProcessState;
   start_time: string;
-  input?: string;
-  output?: string;
+  input?: string | number;
   error?: string;
   exit_code?: number;
-  stats?: {
-    given?: number;
-    generated?: number;
-    kept?: number;
-    proofs?: number;
-    cpu_time?: number;
-    domain_size?: number;
-    models?: number;
-    input_models?: number;
-    kept_models?: number;
-    removed_models?: number;
-  };
+  stats?: string;
+  // {
+  //   given?: number;
+  //   generated?: number;
+  //   kept?: number;
+  //   proofs?: number;
+  //   cpu_time?: number;
+  //   domain_size?: number;
+  //   models?: number;
+  //   input_models?: number;
+  //   kept_models?: number;
+  //   removed_models?: number;
+  // };
   resource_usage?: {
     cpu_percent?: number;
     memory_percent?: number;

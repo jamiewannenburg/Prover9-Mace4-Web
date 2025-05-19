@@ -11,9 +11,8 @@ import tempfile
 import subprocess
 import threading
 import psutil
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 from datetime import datetime
-from fastapi import HTTPException
 
 from p9m4_types import (
     ProgramType, ProcessInfo, ProcessState
@@ -22,7 +21,7 @@ from parse import manual_standardize_mace4_output
 
 # Global process tracking
 processes: Dict[int, ProcessInfo] = {}
-process_outputs: Dict[int, str] = {}  # Store outputs separately
+#process_outputs: Dict[int, str] = {}  # Store outputs separately
 process_lock = threading.Lock()
 
 def binary_ok(fullpath: str) -> bool:
@@ -55,7 +54,7 @@ def get_process_stats(pid: int) -> Dict:
     try:
         process = psutil.Process(pid)
         return {
-            "cpu_percent": process.cpu_percent(),
+            "cpu_percent": process.cpu_percent(interval=0.1),
             "memory_percent": process.memory_percent(),
             "memory_info": process.memory_info()._asdict(),
             "create_time": datetime.fromtimestamp(process.create_time()),
@@ -65,48 +64,48 @@ def get_process_stats(pid: int) -> Dict:
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         return {}
 
-def get_prover9_stats(output: str) -> Dict:
-    """Extract statistics from Prover9 output"""
-    stats = {}
-    if "Given=" in output:
-        match = re.search(r'Given=(\d+)\. Generated=(\d+)\. Kept=(\d+)\. proofs=(\d+)\.User_CPU=(\d*\.\d*),', output)
-        if match:
-            stats = {
-                "given": int(match.group(1)),
-                "generated": int(match.group(2)),
-                "kept": int(match.group(3)),
-                "proofs": int(match.group(4)),
-                "cpu_time": float(match.group(5))
-            }
-    return stats
+# def get_prover9_stats(output: str) -> Dict:
+#     """Extract statistics from Prover9 output"""
+#     stats = {}
+#     if "Given=" in output:
+#         match = re.search(r'Given=(\d+)\. Generated=(\d+)\. Kept=(\d+)\. proofs=(\d+)\.User_CPU=(\d*\.\d*),', output)
+#         if match:
+#             stats = {
+#                 "given": int(match.group(1)),
+#                 "generated": int(match.group(2)),
+#                 "kept": int(match.group(3)),
+#                 "proofs": int(match.group(4)),
+#                 "cpu_time": float(match.group(5))
+#             }
+#     return stats
 
-def get_mace4_stats(output: str) -> Dict:
-    """Extract statistics from Mace4 output"""
-    stats = {}
-    if "Domain_size=" in output:
-        match = re.search(r'Domain_size=(\d+)\. Models=(\d+)\. User_CPU=(\d*\.\d*)\.', output)
-        if match:
-            stats = {
-                "domain_size": int(match.group(1)),
-                "models": int(match.group(2)),
-                "cpu_time": float(match.group(3))
-            }
-    return stats
+# def get_mace4_stats(output: str) -> Dict:
+#     """Extract statistics from Mace4 output"""
+#     stats = {}
+#     if "Domain_size=" in output:
+#         match = re.search(r'Domain_size=(\d+)\. Models=(\d+)\. User_CPU=(\d*\.\d*)\.', output)
+#         if match:
+#             stats = {
+#                 "domain_size": int(match.group(1)),
+#                 "models": int(match.group(2)),
+#                 "cpu_time": float(match.group(3))
+#             }
+#     return stats
 
-def get_isofilter_stats(output: str) -> Dict:
-    """Extract statistics from Isofilter output"""
-    stats = {}
-    if "input=" in output:
-        match = re.search(r'input=(\d+), kept=(\d+)', output)
-        if match:
-            stats = {
-                "input_models": int(match.group(1)),
-                "kept_models": int(match.group(2)),
-                "removed_models": int(match.group(1)) - int(match.group(2))
-            }
-    return stats
+# def get_isofilter_stats(output: str) -> Dict:
+#     """Extract statistics from Isofilter output"""
+#     stats = {}
+#     if "input=" in output:
+#         match = re.search(r'input=(\d+), kept=(\d+)', output)
+#         if match:
+#             stats = {
+#                 "input_models": int(match.group(1)),
+#                 "kept_models": int(match.group(2)),
+#                 "removed_models": int(match.group(1)) - int(match.group(2))
+#             }
+#     return stats
 
-def run_program(program: ProgramType, input_text: str, process_id: int, options: Optional[Dict] = None) -> None:
+def run_program(program: ProgramType, input_text: Union[str,int], process_id: int, options: Optional[Dict] = None) -> None:
     """Run a program in a separate thread"""
     program_path = get_program_path(program)
     if not program_path or not binary_ok(program_path):
@@ -116,16 +115,20 @@ def run_program(program: ProgramType, input_text: str, process_id: int, options:
         return
 
     # Create temporary files
-    fin = tempfile.TemporaryFile('w+b')
-    fout = tempfile.TemporaryFile('w+b')
-    ferr = tempfile.TemporaryFile('w+b')
+    fin = tempfile.NamedTemporaryFile('w+b', delete=False)
+    fout = tempfile.NamedTemporaryFile('w+b', delete=False)
+    ferr = tempfile.NamedTemporaryFile('w+b', delete=False)
 
     try:
+        if isinstance(input_text, int):
+            # get text from process outputs
+            process_info = processes[input_text]
+            with open(process_info.fout_path, 'rb') as f:
+                input_text = f.read().decode('utf-8', errors='replace')
         # Write input to stdin
-        if isinstance(input_text, str):
-            if program == ProgramType.ISOFILTER:
-                input_text = manual_standardize_mace4_output(input_text)
-            input_text = input_text.encode('utf-8')
+        if program in [ProgramType.ISOFILTER, ProgramType.ISOFILTER2]:
+            input_text = manual_standardize_mace4_output(input_text)
+        input_text = input_text.encode('utf-8')
             
         fin.write(input_text)
         fin.seek(0)
@@ -164,13 +167,17 @@ def run_program(program: ProgramType, input_text: str, process_id: int, options:
             command,
             stdin=fin,
             stdout=fout,
-            stderr=ferr
+            stderr=ferr,
+            bufsize=1
         )
 
         # Update process info
         with process_lock:
             processes[process_id].pid = process.pid
             processes[process_id].state = ProcessState.RUNNING
+            processes[process_id].fin_path = fin.name
+            processes[process_id].fout_path = fout.name
+            processes[process_id].ferr_path = ferr.name
 
         # Monitor process
         while process.poll() is None:
@@ -178,26 +185,35 @@ def run_program(program: ProgramType, input_text: str, process_id: int, options:
             with process_lock:
                 processes[process_id].resource_usage = get_process_stats(process.pid)
             
-            process.fout.seek(0)  # rewind
-            # iterate over lines
-            stats = ""
-            started = False
-            for line in process.fout:
-                if process.program in [ProgramType.ISOFILTER, ProgramType.ISOFILTER2]:
-                    if line.startswith("% isofilter"):
-                        stats = line
-                else:
-                    if not started:
-                        if line.contains("STATISTICS"):
-                            started = True
-                            stats = ""
+                fout.seek(0)  # rewind
+                # iterate over lines
+                stats = ""
+                started = False
+                domain_size = 0
+                for line in fout:
+                    line = line.decode('utf-8', errors='replace')
+                    if program in [ProgramType.ISOFILTER, ProgramType.ISOFILTER2]:
+                        if line.startswith("% isofilter"):
+                            stats = line
                     else:
-                        if line.startswith("==="):
-                            started = False
+                        if program == ProgramType.MACE4:
+                            m = re.search(r'DOMAIN SIZE (\d+)', line)
+                            if m:
+                                domain_size = int(m.group(1))
+                        if not started:
+                            if "STATISTICS" in line:
+                                started = True
+                                stats = ""
                         else:
-                            stats += line
-            processes[process_id].stats = stats
+                            if line.startswith("==="):
+                                started = False
+                            else:
+                                stats += line
 
+                if domain_size > 0:
+                    stats = f"Domain size: {domain_size}\n{stats}"
+
+                processes[process_id].stats = stats
             # Check if process was killed
             if processes[process_id].state == ProcessState.KILLED:
                 process.terminate()
@@ -208,7 +224,7 @@ def run_program(program: ProgramType, input_text: str, process_id: int, options:
         # Process finished
         exit_code = process.poll()
         fout.seek(0)
-        output = fout.read().decode('utf-8', errors='replace')
+        #output = fout.read().decode('utf-8', errors='replace')
         ferr.seek(0)
         error = ferr.read().decode('utf-8', errors='replace')
 
@@ -217,18 +233,16 @@ def run_program(program: ProgramType, input_text: str, process_id: int, options:
             processes[process_id].exit_code = exit_code
             processes[process_id].error = error
             processes[process_id].state = ProcessState.DONE
-            process_outputs[process_id] = output  # Store output separately
-            
-            # # Update statistics
-            # if program == ProgramType.PROVER9:
-            #     processes[process_id].stats = get_prover9_stats(output)
-            # elif program == ProgramType.MACE4:
-            #     processes[process_id].stats = get_mace4_stats(output)
-            # elif program in [ProgramType.ISOFILTER, ProgramType.ISOFILTER2]:
-            #     processes[process_id].stats = get_isofilter_stats(output)
+            #process_outputs[process_id] = output  # Store output separately
 
-    finally:
-        # Cleanup
+    except Exception as e:
+        with process_lock:
+            processes[process_id].state = ProcessState.ERROR
+            processes[process_id].error = str(e)
+        # Cleanup files on error
         fin.close()
         fout.close()
-        ferr.close() 
+        ferr.close()
+        os.unlink(fin.name)
+        os.unlink(fout.name)
+        os.unlink(ferr.name) 

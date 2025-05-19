@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Card, Button, ButtonGroup, Form } from 'react-bootstrap';
-import { Process, INTERP_FORMATS, InterpFormat, ProoftransOption, PROOFTRANS_OPTIONS } from '../types';
+import { Process, INTERP_FORMATS, InterpFormat, ProoftransOption, PROOFTRANS_OPTIONS, ProcessOutput } from '../types';
 import { formatDuration } from '../utils';
 
 interface ProcessDetailsProps {
@@ -13,60 +13,98 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
   const [output, setOutput] = useState<string>('');
   const [selectedFormat, setSelectedFormat] = useState<string>('standard');
   const [prooftransOption, setProoftransOption] = useState<ProoftransOption>(PROOFTRANS_OPTIONS[0]);
+  // const [prooftransLabel, setProoftransLabel] = useState<string>('');
   const [isofilterOptions, setIsofilterOptions] = useState({
     wrap: false,
     ignore_constants: false
   });
-  // const [prooftransLabel, setProoftransLabel] = useState<string>('');
+  const [page, setPage] = useState<number>(1);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const outputRef = useRef<HTMLPreElement>(null);
+  const prevProcessIdRef = useRef<number | null>(null);
+  const PAGE_SIZE = 100;
   
   const selectedProcess = processes.find(p => p.id === processId);
+  
+  const fetchOutput = async (pageNum: number = 1, append: boolean = false) => {
+    if (!processId || isLoading) return;
+    
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${apiUrl}/output/${processId}?page=${pageNum}&page_size=${PAGE_SIZE}`);
+      if (response.ok) {
+        const data: ProcessOutput = await response.json();
+        setOutput(prev => append ? prev + '\n' + data.output : data.output);
+        setHasMore(data.has_more);
+        setPage(pageNum);
+      } else {
+        // const errorText = await response.text();
+        // console.error('Failed to fetch output:', errorText);
+        if (!append) {
+          setOutput('No output available');
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching output:', error);
+      if (!append) {
+        setOutput('Error fetching output');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleScroll = () => {
+    if (!outputRef.current || !hasMore || isLoading) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = outputRef.current;
+    if (scrollHeight - scrollTop - clientHeight < 100) { // Load more when within 100px of bottom
+      fetchOutput(page + 1, true);
+    }
+  };
   
   useEffect(() => {
     if (!processId) {
       setOutput('');
+      setPage(1);
+      setHasMore(true);
+      prevProcessIdRef.current = null;
       return;
     }
     
-    const fetchOutput = async () => {
-      try {
-        const response = await fetch(`${apiUrl}/status/${processId}`);
-        if (response.ok) {
-          const data = await response.json();
-          setOutput(data.output || 'No output available');
-        } else {
-          const errorText = await response.text();
-          console.error('Failed to fetch output:', errorText);
-          setOutput('Failed to fetch output');
-        }
-      } catch (error) {
-        console.error('Error fetching output:', error);
-        setOutput('Error fetching output');
-      }
-    };
-    
-    fetchOutput();
-    
-    // Set up polling for output if process is running
     if (selectedProcess?.state === 'running') {
-      const intervalId = setInterval(fetchOutput, 3000);
-      return () => {
-        clearInterval(intervalId);
-      };
+      prevProcessIdRef.current = null;// Start polling for the new process output
+      const pollInterval = setInterval(async () => {
+        fetchOutput(1, false);
+        if (processId !== prevProcessIdRef.current || selectedProcess?.state !== 'running')
+        {
+          clearInterval(pollInterval);
+        }
+      }, 1000);
     }
-  }, [processId, apiUrl, selectedProcess]);
+
+    // Only fetch output if processId has changed or the process is running
+    if (processId !== prevProcessIdRef.current) {
+      fetchOutput(1, false);
+      prevProcessIdRef.current = processId;
+    }
+  }, [processId]); // Remove apiUrl from dependencies since it shouldn't trigger a refresh
   
   const downloadOutput = async () => {
     if (!processId || !output) return;
     
     try {
-      // Create a blob from the output text
-      const blob = new Blob([output], { type: 'text/plain' });
-      const url = window.URL.createObjectURL(blob);
-      
+      // // Create a blob from the output text
+      // const blob = new Blob([output], { type: 'text/plain' });
+      // const url = window.URL.createObjectURL(blob);
+      const url = `${apiUrl}/download/${processId}`;
       // Create a temporary link element
       const a = document.createElement('a');
+      // download output as a file
       a.href = url;
-      a.download = `output_${processId}.txt`;
+      a.target = '_blank';
+      a.download = `output_${processId}.${selectedProcess?.program}`;
       
       // Append to body, click, and cleanup
       document.body.appendChild(a);
@@ -90,7 +128,7 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
         },
         body: JSON.stringify({
           program: 'prooftrans',
-          input: output,
+          input: processId,
           options: {
             format: prooftransOption.format,
           },
@@ -106,16 +144,16 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
         // Process started successfully
         const data = await response.json();
         // Start polling for the new process output
-        const pollInterval = setInterval(async () => {
-          const statusResponse = await fetch(`${apiUrl}/status/${data.process_id}`);
-          if (statusResponse.ok) {
-            const statusData = await statusResponse.json();
-            if (statusData.state === 'done') {
-              setOutput(statusData.output || 'No formatted output available');
-              clearInterval(pollInterval);
-            }
-          }
-        }, 1000);
+        // const pollInterval = setInterval(async () => {
+        //   const statusResponse = await fetch(`${apiUrl}/status/${data.process_id}`);
+        //   if (statusResponse.ok) {
+        //     const statusData = await statusResponse.json();
+        //     if (statusData.state === 'done') {
+        //       setOutput(statusData.output || 'No formatted output available');
+        //       clearInterval(pollInterval);
+        //     }
+        //   }
+        // }, 1000);
       } else {
         alert('Failed to format output');
       }
@@ -136,7 +174,7 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
         },
         body: JSON.stringify({
           program: 'interpformat',
-          input: output,
+          input: processId,
           options: {
             format: selectedFormat
           }
@@ -147,17 +185,19 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
         // Process started successfully
         const data = await response.json();
         // Start polling for the new process output
-        const pollInterval = setInterval(async () => {
-          const statusResponse = await fetch(`${apiUrl}/status/${data.process_id}`);
-          if (statusResponse.ok) {
-            const statusData = await statusResponse.json();
-            if (statusData.state === 'done') {
-              setOutput(statusData.output || 'No formatted output available');
-              clearInterval(pollInterval);
-            }
-          }
-        }, 1000);
+        // const pollInterval = setInterval(async () => {
+        //   const statusResponse = await fetch(`${apiUrl}/status/${data.process_id}`);
+        //   if (statusResponse.ok) {
+        //     const statusData = await statusResponse.json();
+        //     if (statusData.state === 'done') {
+        //       setOutput(statusData.output || 'No formatted output available');
+        //       clearInterval(pollInterval);
+        //     }
+        //   }
+        // }, 1000);
       } else {
+        const data = await response.json();
+        console.error('Failed to format output:', data);
         alert('Failed to format output');
       }
     } catch (error) {
@@ -177,7 +217,7 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
         },
         body: JSON.stringify({
           program: 'isofilter',
-          input: output,
+          input: processId,
           options: isofilterOptions
         }),
       });
@@ -186,16 +226,16 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
         // Process started successfully
         const data = await response.json();
         // Start polling for the new process output
-        const pollInterval = setInterval(async () => {
-          const statusResponse = await fetch(`${apiUrl}/status/${data.process_id}`);
-          if (statusResponse.ok) {
-            const statusData = await statusResponse.json();
-            if (statusData.state === 'done') {
-              setOutput(statusData.output || 'No filtered output available');
-              clearInterval(pollInterval);
-            }
-          }
-        }, 1000);
+        // const pollInterval = setInterval(async () => {
+        //   const statusResponse = await fetch(`${apiUrl}/status/${data.process_id}`);
+        //   if (statusResponse.ok) {
+        //     const statusData = await statusResponse.json();
+        //     if (statusData.state === 'done') {
+        //       setOutput(statusData.output || 'No filtered output available');
+        //       clearInterval(pollInterval);
+        //     }
+        //   }
+        // }, 1000);
       } else {
         alert('Failed to filter models');
       }
@@ -225,24 +265,29 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
       `Status: ${process.state}`,
       `Duration: ${formatDuration(duration)}`
     ];
+
+    if (process.state === 'error' && process.error) {
+      info.push(`Error: ${process.error}`);
+    }
     
     if (process.stats) {
-      const stats = process.stats;
-      if (process.program === 'prover9') {
-        info.push(
-          `Given: ${stats.given || '?'}`,
-          `Generated: ${stats.generated || '?'}`,
-          `Kept: ${stats.kept || '?'}`,
-          `Proofs: ${stats.proofs || '?'}`,
-          `CPU Time: ${stats.cpu_time || '?'}s`
-        );
-      } else if (process.program === 'mace4') {
-        info.push(
-          `Domain Size: ${stats.domain_size || '?'}`,
-          `Models: ${stats.models || '?'}`,
-          `CPU Time: ${stats.cpu_time || '?'}s`
-        );
-      }
+      info.push(process.stats);
+      // const stats = process.stats;
+      // if (process.program === 'prover9') {
+      //   info.push(
+      //     `Given: ${stats.given || '?'}`,
+      //     `Generated: ${stats.generated || '?'}`,
+      //     `Kept: ${stats.kept || '?'}`,
+      //     `Proofs: ${stats.proofs || '?'}`,
+      //     `CPU Time: ${stats.cpu_time || '?'}s`
+      //   );
+      // } else if (process.program === 'mace4') {
+      //   info.push(
+      //     `Domain Size: ${stats.domain_size || '?'}`,
+      //     `Models: ${stats.models || '?'}`,
+      //     `CPU Time: ${stats.cpu_time || '?'}s`
+      //   );
+      // }
     }
     
     if (process.resource_usage) {
@@ -383,11 +428,23 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
             </ButtonGroup>
           </div>
         )}
-        
+        {(selectedProcess.program !== 'prover9' && selectedProcess.program !== 'mace4' && selectedProcess.program !== 'isofilter' && selectedProcess.program !== 'interpformat') && (
+          <div className="mb-3">
+            <Button variant="outline-primary" size="sm" onClick={downloadOutput}>
+              Download
+            </Button>
+          </div>
+        )}
         <div className="output-container">
           <h5>Output</h5>
-          <pre className="output-text p-2 border bg-light" style={{ maxHeight: '500px', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+          <pre 
+            ref={outputRef}
+            className="output-text p-2 border bg-light" 
+            style={{ maxHeight: '500px', overflow: 'auto', whiteSpace: 'pre-wrap' }}
+            onScroll={handleScroll}
+          >
             {output || 'No output available'}
+            {isLoading && selectedProcess?.state !== 'running' && <div className="text-center">Loading...</div>}
           </pre>
         </div>
       </Card.Body>

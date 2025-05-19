@@ -2,6 +2,7 @@ from typing import Dict, List, Union, Set, Tuple, Literal, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 from enum import Enum
+import tempfile
 
 import sys
 
@@ -22,17 +23,25 @@ class ProgramType(Enum):
     INTERPFORMAT = "interpformat"
     PROOFTRANS = "prooftrans"
 
+class ProgramInput(BaseModel):
+    program: ProgramType
+    input: Union[str, int]
+    options: Optional[Dict] = None
+
 class ProcessInfo(BaseModel):
     pid: int
     start_time: datetime
     state: ProcessState
     program: ProgramType
-    input: str
+    input: Union[str, int]
     error: Optional[str] = None
     exit_code: Optional[int] = None
     stats: Optional[str] = None
     resource_usage: Optional[Dict] = None
     options: Optional[Dict] = None
+    fin_path: Optional[str] = None  # Input file path
+    fout_path: Optional[str] = None  # Output file path
+    ferr_path: Optional[str] = None  # Error file path
 
 class ProcessOutput(BaseModel):
     output: str
@@ -345,11 +354,6 @@ The effect of setting restrict_denials is that proofs will usually be more forwa
     extra_parameters: List[Parameter] = Field(default=[])
 
 # Input output types
-
-class ProgramInput(BaseModel):
-    program: ProgramType
-    input: str
-    options: Optional[Dict] = None
 
 class ParseInput(BaseModel):
     input: str
