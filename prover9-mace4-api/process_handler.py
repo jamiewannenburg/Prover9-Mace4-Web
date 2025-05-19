@@ -26,6 +26,15 @@ from sync_lock import SyncLock
 
 PROCESS_QUEUE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 os.makedirs(PROCESS_QUEUE_PATH, exist_ok=True)
+
+# Create subdirectories for process files
+INPUT_DIR = os.path.join(PROCESS_QUEUE_PATH, 'input')
+OUTPUT_DIR = os.path.join(PROCESS_QUEUE_PATH, 'output')
+ERROR_DIR = os.path.join(PROCESS_QUEUE_PATH, 'error')
+os.makedirs(INPUT_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(ERROR_DIR, exist_ok=True)
+
 #processes: Dict[int, ProcessInfo] = PDict(PROCESS_QUEUE_PATH,'processes')
 processes = shelve.open(os.path.join(PROCESS_QUEUE_PATH,'processes'),writeback=True)
 #process_outputs: Dict[int, str] = {}  # Store outputs separately
@@ -123,10 +132,10 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
             processes[str(str(process_id))].error = f"{program.value} binary not found or not executable"
         return
 
-    # Create temporary files
-    fin = tempfile.NamedTemporaryFile('w+b', delete=False)
-    fout = tempfile.NamedTemporaryFile('w+b', delete=False)
-    ferr = tempfile.NamedTemporaryFile('w+b', delete=False)
+    # Create temporary files in data directories
+    fin = tempfile.TemporaryFile('w+b', dir=INPUT_DIR, prefix=f"{process_id}_", suffix='.in', delete=False)
+    fout = tempfile.TemporaryFile('w+b', dir=OUTPUT_DIR, prefix=f"{process_id}_", suffix='.out', delete=False)
+    ferr = tempfile.TemporaryFile('w+b', dir=ERROR_DIR, prefix=f"{process_id}_", suffix='.err', delete=False)
 
     try:
         if isinstance(input_text, int):
@@ -252,9 +261,9 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
         fin.close()
         fout.close()
         ferr.close()
-        os.unlink(fin.name)
-        os.unlink(fout.name)
-        os.unlink(ferr.name) 
+        # os.unlink(fin.name)
+        # os.unlink(fout.name)
+        # os.unlink(ferr.name)
 
 def rerun_processes():
     """Rerun processes that are still running after a restart"""

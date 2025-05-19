@@ -46,6 +46,7 @@ COPY --from=builder /app/bin /app/bin
 
 # Create directories for Prover9-Mace4
 RUN mkdir -p /app/bin && \
+    mkdir -p /app/data && \
     chown -R apps:apps /app
 
 # Set environment variables

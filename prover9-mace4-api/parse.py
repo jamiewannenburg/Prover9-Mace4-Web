@@ -260,15 +260,26 @@ def generate_input(input: GuiOutput) -> str:
 
 def manual_standardize_mace4_output(input_text: str) -> str:
     # ignore text before DOMAIN SIZE line
-    m = re.search(r'============================== DOMAIN SIZE \d+ =========================\n', input_text)
-    if m:
-        # get last ============================== end of model ==========================
-        eom = list(re.finditer(r'============================== end of model ==========================\n', input_text))
-        if len(eom) > 0:
-            n = eom[-1]
-            input_text = input_text[m.end():n.start()]
-            # remove all lines containing `====`
-            input_text = re.sub(r'====.*\n', '', input_text)
-        else:
-            raise ParseException("Invalid input, expecting ==== end of model ====")
-    return input_text
+
+    # domain = re.compile(r'DOMAIN SIZE \d+')
+    # statistics = re.compile(r'STATISTICS')
+    # end_of_statistics = re.compile(r'end of statistics\n')
+    model = re.compile(r'MODEL')
+    end_of_model = re.compile(r'end of model')
+    keep = True
+    # ignore = False
+    is_output = False
+    output = ""
+    for line in input_text.splitlines():
+        if not is_output and model.search(line):
+            is_output = True
+            output = ""
+        if is_output:
+            if model.search(line):
+                keep = True
+            elif end_of_model.search(line):
+                keep = False
+            else:
+                if keep:
+                    output += line
+    return output #should I eventually yield instead?
