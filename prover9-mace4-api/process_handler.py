@@ -11,17 +11,21 @@ import tempfile
 import subprocess
 import threading
 import psutil
-from typing import Dict, Optional, Union
+import json
+from typing import Dict, Optional, Union, List
 from datetime import datetime
+from persistqueue import SQLiteAckQueue
 
 from p9m4_types import (
     ProgramType, ProcessInfo, ProcessState
 )
 from parse import manual_standardize_mace4_output
+from db_models import Session, ProcessModel
 
-# Global process tracking
-processes: Dict[int, ProcessInfo] = {}
-#process_outputs: Dict[int, str] = {}  # Store outputs separately
+# Process queue for currently running processes
+PROCESS_QUEUE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'process_queue')
+os.makedirs(PROCESS_QUEUE_PATH, exist_ok=True)
+process_queue = SQLiteAckQueue(PROCESS_QUEUE_PATH, multithreading=True)
 process_lock = threading.Lock()
 
 def binary_ok(fullpath: str) -> bool:
@@ -64,54 +68,136 @@ def get_process_stats(pid: int) -> Dict:
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         return {}
 
-# def get_prover9_stats(output: str) -> Dict:
-#     """Extract statistics from Prover9 output"""
-#     stats = {}
-#     if "Given=" in output:
-#         match = re.search(r'Given=(\d+)\. Generated=(\d+)\. Kept=(\d+)\. proofs=(\d+)\.User_CPU=(\d*\.\d*),', output)
-#         if match:
-#             stats = {
-#                 "given": int(match.group(1)),
-#                 "generated": int(match.group(2)),
-#                 "kept": int(match.group(3)),
-#                 "proofs": int(match.group(4)),
-#                 "cpu_time": float(match.group(5))
-#             }
-#     return stats
+def get_process_info(process_id: int) -> Optional[ProcessInfo]:
+    """Get process information from the queue or database"""
+    with process_lock:
+        # try:
+            # # First check the queue for running processes
+            # for item in process_queue.queue():
+            #     if item['process_id'] == process_id:
+            #         return ProcessInfo(**item)
+            
+            # If not in queue, check the database
+        session = Session()
+        try:
+            process = session.query(ProcessModel).filter_by(process_id=process_id).first()
+            if process:
+                return ProcessInfo(
+                    pid=process.pid,
+                    start_time=process.start_time,
+                    state=process.state,
+                    program=process.program,
+                    input=process.input_text,
+                    error=process.error,
+                    exit_code=process.exit_code,
+                    stats=process.stats,
+                    resource_usage=process.resource_usage,
+                    options=process.options,
+                    fin_path=process.fin_path,
+                    fout_path=process.fout_path,
+                    ferr_path=process.ferr_path
+                )
+        finally:
+            session.close()
+        return None
 
-# def get_mace4_stats(output: str) -> Dict:
-#     """Extract statistics from Mace4 output"""
-#     stats = {}
-#     if "Domain_size=" in output:
-#         match = re.search(r'Domain_size=(\d+)\. Models=(\d+)\. User_CPU=(\d*\.\d*)\.', output)
-#         if match:
-#             stats = {
-#                 "domain_size": int(match.group(1)),
-#                 "models": int(match.group(2)),
-#                 "cpu_time": float(match.group(3))
-#             }
-#     return stats
+def add_process_info(process_info: ProcessInfo) -> None:
+    """Add process information to both queue and database"""
+    with process_lock:
+        # Add to database
+        session = Session()
+        try:
+            db_process = ProcessModel(
+                process_id=process_info.process_id,
+                pid=process_info.pid,
+                start_time=process_info.start_time,
+                state=process_info.state,
+                program=process_info.program,
+                input_text=process_info.input,
+                error=process_info.error,
+                exit_code=process_info.exit_code,
+                stats=process_info.stats,
+                resource_usage=process_info.resource_usage,
+                options=process_info.options,
+                fin_path=process_info.fin_path,
+                fout_path=process_info.fout_path,
+                ferr_path=process_info.ferr_path
+            )
+            session.add(db_process)
+            session.commit()
+        finally:
+            session.close()
 
-# def get_isofilter_stats(output: str) -> Dict:
-#     """Extract statistics from Isofilter output"""
-#     stats = {}
-#     if "input=" in output:
-#         match = re.search(r'input=(\d+), kept=(\d+)', output)
-#         if match:
-#             stats = {
-#                 "input_models": int(match.group(1)),
-#                 "kept_models": int(match.group(2)),
-#                 "removed_models": int(match.group(1)) - int(match.group(2))
-#             }
-#     return stats
+        # # If process is running, add to queue
+        # if process_info.state == ProcessState.RUNNING:
+        #     process_queue.put(process_info.__dict__)
+
+def remove_process_info(process_id: int) -> None:
+    """Remove process information from the queue"""
+    with process_lock:
+        session = Session()
+        try:
+            process = session.query(ProcessModel).filter_by(process_id=process_id).first()
+            if process:
+                session.delete(process)
+                session.commit()
+        finally:
+            session.close()
+        # try:
+        #     for item in process_queue.queue():
+        #         if item['process_id'] == process_id:
+        #             process_queue.ack(item)
+        #             break
+        # except Exception:
+        #     pass
+
+def update_process_info(process_id: int, **kwargs) -> None:
+    """Update process information in both queue and database"""
+    with process_lock:
+        # Update database
+        session = Session()
+        try:
+            process = session.query(ProcessModel).filter_by(process_id=process_id).first()
+            if process:
+                for key, value in kwargs.items():
+                    setattr(process, key, value)
+                session.commit()
+        finally:
+            session.close()
+
+        # Update queue if process is running
+        # try:
+        #     for item in process_queue.queue():
+        #         if item['process_id'] == process_id:
+        #             item.update(kwargs)
+        #             process_queue.put(item)
+        #             break
+        # except Exception:
+        #     pass
+
+def process_list() -> List[int]:
+    """Get a list of all process ids"""
+    with process_lock:
+        session = Session()
+        try:
+            # Get all process IDs from database
+            db_processes = session.query(ProcessModel.process_id).all()
+            process_ids = [p[0] for p in db_processes]
+            
+            # # Add any running processes from queue that might not be in DB
+            # for item in process_queue.queue():
+            #     if item['process_id'] not in process_ids:
+            #         process_ids.append(item['process_id'])
+            
+            return process_ids
+        finally:
+            session.close()
 
 def run_program(program: ProgramType, input_text: Union[str,int], process_id: int, options: Optional[Dict] = None) -> None:
     """Run a program in a separate thread"""
     program_path = get_program_path(program)
     if not program_path or not binary_ok(program_path):
-        with process_lock:
-            processes[process_id].state = ProcessState.ERROR
-            processes[process_id].error = f"{program.value} binary not found or not executable"
+        update_process_info(process_id, state=ProcessState.ERROR, error=f"{program.value} binary not found or not executable")
         return
 
     # Create temporary files
@@ -122,9 +208,10 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
     try:
         if isinstance(input_text, int):
             # get text from process outputs
-            process_info = processes[input_text]
-            with open(process_info.fout_path, 'rb') as f:
-                input_text = f.read().decode('utf-8', errors='replace')
+            process_info = get_process_info(input_text)
+            if process_info:
+                with open(process_info.fout_path, 'rb') as f:
+                    input_text = f.read().decode('utf-8', errors='replace')
         # Write input to stdin
         if program in [ProgramType.ISOFILTER, ProgramType.ISOFILTER2]:
             input_text = manual_standardize_mace4_output(input_text)
@@ -171,51 +258,65 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
             bufsize=1
         )
 
-        # Update process info
-        with process_lock:
-            processes[process_id].pid = process.pid
-            processes[process_id].state = ProcessState.RUNNING
-            processes[process_id].fin_path = fin.name
-            processes[process_id].fout_path = fout.name
-            processes[process_id].ferr_path = ferr.name
+        # Create initial process info
+        process_info = ProcessInfo(
+            process_id=process_id,
+            pid=process.pid,
+            state=ProcessState.RUNNING,
+            program=program,
+            input=input_text.decode('utf-8'),
+            fin_path=fin.name,
+            fout_path=fout.name,
+            ferr_path=ferr.name,
+            start_time=datetime.now(),
+            resource_usage={},
+            stats="",
+            error="",
+            exit_code=None,
+            options=options
+        )
+        
+        # Add to both queue and database
+        add_process_info(process_info)
 
         # Monitor process
         while process.poll() is None:
             # Update resource usage
-            with process_lock:
-                processes[process_id].resource_usage = get_process_stats(process.pid)
+            update_process_info(process_id, resource_usage=get_process_stats(process.pid))
             
-                fout.seek(0)  # rewind
-                # iterate over lines
-                stats = ""
-                started = False
-                domain_size = 0
-                for line in fout:
-                    line = line.decode('utf-8', errors='replace')
-                    if program in [ProgramType.ISOFILTER, ProgramType.ISOFILTER2]:
-                        if line.startswith("% isofilter"):
-                            stats = line
+            fout.seek(0)  # rewind
+            # iterate over lines
+            stats = ""
+            started = False
+            domain_size = 0
+            for line in fout:
+                line = line.decode('utf-8', errors='replace')
+                if program in [ProgramType.ISOFILTER, ProgramType.ISOFILTER2]:
+                    if line.startswith("% isofilter"):
+                        stats = line
+                else:
+                    if program == ProgramType.MACE4:
+                        m = re.search(r'DOMAIN SIZE (\d+)', line)
+                        if m:
+                            domain_size = int(m.group(1))
+                    if not started:
+                        if "STATISTICS" in line:
+                            started = True
+                            stats = ""
                     else:
-                        if program == ProgramType.MACE4:
-                            m = re.search(r'DOMAIN SIZE (\d+)', line)
-                            if m:
-                                domain_size = int(m.group(1))
-                        if not started:
-                            if "STATISTICS" in line:
-                                started = True
-                                stats = ""
+                        if line.startswith("==="):
+                            started = False
                         else:
-                            if line.startswith("==="):
-                                started = False
-                            else:
-                                stats += line
+                            stats += line
 
-                if domain_size > 0:
-                    stats = f"Domain size: {domain_size}\n{stats}"
+            if domain_size > 0:
+                stats = f"Domain size: {domain_size}\n{stats}"
 
-                processes[process_id].stats = stats
+            update_process_info(process_id, stats=stats)
+
             # Check if process was killed
-            if processes[process_id].state == ProcessState.KILLED:
+            process_info = get_process_info(process_id)
+            if process_info and process_info.state == ProcessState.KILLED:
                 process.terminate()
                 break
 
@@ -224,25 +325,56 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
         # Process finished
         exit_code = process.poll()
         fout.seek(0)
-        #output = fout.read().decode('utf-8', errors='replace')
         ferr.seek(0)
         error = ferr.read().decode('utf-8', errors='replace')
 
-        # Update process info
-        with process_lock:
-            processes[process_id].exit_code = exit_code
-            processes[process_id].error = error
-            processes[process_id].state = ProcessState.DONE
-            #process_outputs[process_id] = output  # Store output separately
+        # Update process info and remove from queue
+        update_process_info(
+            process_id,
+            exit_code=exit_code,
+            error=error,
+            state=ProcessState.DONE
+        )
+        remove_process_info(process_id)
 
     except Exception as e:
-        with process_lock:
-            processes[process_id].state = ProcessState.ERROR
-            processes[process_id].error = str(e)
+        update_process_info(
+            process_id,
+            state=ProcessState.ERROR,
+            error=str(e)
+        )
+        remove_process_info(process_id)
         # Cleanup files on error
         fin.close()
         fout.close()
         ferr.close()
         os.unlink(fin.name)
         os.unlink(fout.name)
-        os.unlink(ferr.name) 
+        os.unlink(ferr.name)
+
+def restore_unfinished_processes():
+    """Restore any unfinished processes from the database"""
+    session = Session()
+    try:
+        # Get all running processes from database
+        running_processes = session.query(ProcessModel).filter_by(state=ProcessState.RUNNING).all()
+        
+        for process in running_processes:
+            # Create a new thread to restart the process
+            thread = threading.Thread(
+                target=run_program,
+                args=(
+                    process.program,
+                    process.input_text,
+                    process.process_id,
+                    process.options
+                )
+            )
+            thread.daemon = True
+            thread.start()
+    finally:
+        session.close()
+
+# Initialize by restoring any unfinished processes
+restore_unfinished_processes()
+print("Process handler initialized")

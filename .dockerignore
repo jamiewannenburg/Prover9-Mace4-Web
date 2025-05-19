@@ -3,12 +3,15 @@
 .gitignore
 
 # Python
-*/__pycache__/
-*/.pytest_cache/
+**/__pycache__/
+**/.pytest_cache/
 *.py[cod]
 *$py.class
 venv/
-*/.env
+.env
+**/.env
+*.code-workspace
+prover9-mace4-api/data/
 
 # Docker
 .dockerignore

@@ -22,6 +22,7 @@ class TestQuickProver9(unittest.TestCase):
             "program": "prover9",
             "input": self.prover9_input
         })
+        assert self.response.status_code == 200
         self.process_id = self.response.json()["process_id"]
         while requests.get(f"{self.base_url}/status/{self.process_id}").json()["state"] != "done":
             time.sleep(1)
