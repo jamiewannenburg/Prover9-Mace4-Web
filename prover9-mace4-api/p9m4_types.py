@@ -30,7 +30,7 @@ class ProcessInfo(BaseModel):
     input: str
     error: Optional[str] = None
     exit_code: Optional[int] = None
-    stats: Optional[Dict] = None
+    stats: Optional[str] = None
     resource_usage: Optional[Dict] = None
     options: Optional[Dict] = None
 

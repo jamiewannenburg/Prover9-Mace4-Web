@@ -1,4 +1,5 @@
 
+import re
 from pyparsing import (
     Word, alphas, alphanums, Literal, Group, Optional, 
     OneOrMore, ZeroOrMore, ParseException, restOfLine,
@@ -256,3 +257,18 @@ def generate_input(input: GuiOutput) -> str:
     content += goals + "\n"
     content += "end_of_list.\n\n"
     return content
+
+def manual_standardize_mace4_output(input_text: str) -> str:
+    # ignore text before DOMAIN SIZE line
+    m = re.search(r'============================== DOMAIN SIZE \d+ =========================\n', input_text)
+    if m:
+        # get last ============================== end of model ==========================
+        eom = list(re.finditer(r'============================== end of model ==========================\n', input_text))
+        if len(eom) > 0:
+            n = eom[-1]
+            input_text = input_text[m.end():n.start()]
+            # remove all lines containing `====`
+            input_text = re.sub(r'====.*\n', '', input_text)
+        else:
+            raise ParseException("Invalid input, expecting ==== end of model ====")
+    return input_text
