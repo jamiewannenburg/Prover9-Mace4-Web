@@ -27,6 +27,8 @@ services:
       - "8000"
     environment:
       - PYTHONPATH=/app
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped
   gui:
     image: docker.io/jamiewannenburg/prover9-mace4-web-gui:latest

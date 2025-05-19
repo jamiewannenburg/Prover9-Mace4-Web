@@ -13,6 +13,8 @@ services:
       - "8000"
     environment:
       - PYTHONPATH=/app
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped
 ```
 
