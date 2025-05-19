@@ -76,10 +76,11 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
     if (selectedProcess?.state === 'running') {
       prevProcessIdRef.current = null;// Start polling for the new process output
       const pollInterval = setInterval(async () => {
-        fetchOutput(1, false);
         if (processId !== prevProcessIdRef.current || selectedProcess?.state !== 'running')
         {
           clearInterval(pollInterval);
+        } else {
+          fetchOutput(1, false);
         }
       }, 1000);
     }
