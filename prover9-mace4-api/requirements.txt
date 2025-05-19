@@ -1,5 +1,3 @@
-pywebio>=1.8.2
-pywebio-battery>=0.2.0
 pillow>=10.0.0
 fastapi>=0.68.0
 uvicorn>=0.15.0
@@ -11,4 +9,3 @@ dotenv>=0.9.0
 psutil>=5.8.0
 pillow>=10.0.0
 websockets>=10.0
-persist-queue>=0.8.0
