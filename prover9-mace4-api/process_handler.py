@@ -133,9 +133,9 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
         return
 
     # Create temporary files in data directories
-    fin = tempfile.TemporaryFile('w+b', dir=INPUT_DIR, prefix=f"{process_id}_", suffix='.in', delete=False)
-    fout = tempfile.TemporaryFile('w+b', dir=OUTPUT_DIR, prefix=f"{process_id}_", suffix='.out', delete=False)
-    ferr = tempfile.TemporaryFile('w+b', dir=ERROR_DIR, prefix=f"{process_id}_", suffix='.err', delete=False)
+    fin = tempfile.NamedTemporaryFile('w+b', dir=INPUT_DIR, prefix=f"{process_id}_", suffix='.in', delete=False)
+    fout = tempfile.NamedTemporaryFile('w+b', dir=OUTPUT_DIR, prefix=f"{process_id}_", suffix='.out', delete=False)
+    ferr = tempfile.NamedTemporaryFile('w+b', dir=ERROR_DIR, prefix=f"{process_id}_", suffix='.err', delete=False)
 
     try:
         if isinstance(input_text, int):
