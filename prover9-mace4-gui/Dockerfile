@@ -6,6 +6,9 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
+ARG REACT_APP_API_URL
+ENV REACT_APP_API_URL=${REACT_APP_API_URL:-/api}
+
 # Install dependencies
 RUN npm ci
 
@@ -19,7 +22,8 @@ RUN npm run build
 FROM nginx:stable-alpine
 
 # Set API URL to the port forwarded from the API container
-ENV REACT_APP_API_URL=/api
+ARG REACT_APP_API_URL
+ENV REACT_APP_API_URL=${REACT_APP_API_URL:-/api}
 
 # Copy built assets from the builder stage
 COPY --from=builder /app/build /usr/share/nginx/html
