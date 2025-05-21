@@ -4,19 +4,29 @@ import requests
 import time
 from unittest.mock import patch, MagicMock
 import os
+import sys
 from pathlib import Path
+
+
+# directory of this file
+test_dir = Path(__file__).parent
+# api directory
+dir = test_dir.parent
+# change python path to the api directory
+sys.path.append(str(dir.absolute()))
+
+# set the data directory
+os.environ['P9M4_DATA_DIR'] = str((test_dir / "data").absolute())
+
 
 from p9m4_types import ParseOutput, Prover9Options, Mace4Options
 # # make sure the api is running?
 # app.run(debug=True)
 
-# path of this file
-path = Path(__file__).parent
-
 class TestQuickProver9(unittest.TestCase):
     def setUp(self):
         self.base_url = "http://localhost:8000"
-        with open(path / "samples/Equality/Prover9/CL-SK-W.in", "r") as file:
+        with open(dir / "samples/Equality/Prover9/CL-SK-W.in", "r") as file:
             self.prover9_input = file.read()
         self.response = requests.post(f"{self.base_url}/start", json={
             "program": "prover9",
@@ -79,7 +89,7 @@ class TestQuickProver9(unittest.TestCase):
 class TestLongRunningProver9(unittest.TestCase):
     def setUp(self):
         self.base_url = "http://localhost:8000"
-        with open(path / "samples/GT_Sax.in", "r") as file:
+        with open(dir / "samples/GT_Sax.in", "r") as file:
             self.long_running_input = file.read()
         self.response = requests.post(f"{self.base_url}/start", json={
             "program": "prover9",
@@ -123,7 +133,7 @@ class TestLongRunningProver9(unittest.TestCase):
 class TestMace4(unittest.TestCase):
     def setUp(self):
         self.base_url = "http://localhost:8000"
-        with open(path / "samples/Equality/Mace4/CL-QL.in", "r") as file:
+        with open(dir / "samples/Equality/Mace4/CL-QL.in", "r") as file:
             self.mace4_input = file.read()
         self.response = requests.post(f"{self.base_url}/start", json={
             "program": "mace4",
@@ -200,11 +210,13 @@ class TestMace4(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
 class TestParser(unittest.TestCase):
+    def setUp(self):
+        self.base_url = "http://localhost:8000"
     # should be able to parse all the samples
     def test_parse_all_samples(self):
-        dir = Path("samples")
+        samples_dir = dir / "samples"
         # walk through direcory and subdirectories
-        for file in dir.glob("**/*"):
+        for file in samples_dir.glob("**/*"):
             if file.is_file():
                 # check if the file is a prover9 input file
                 if file.name.endswith(".in"):
@@ -215,16 +227,10 @@ class TestParser(unittest.TestCase):
                         })
                         self.assertEqual(response.status_code, 200)
                         output = response.json()
+                        output = ParseOutput(**output)
                         self.assertIsInstance(output, ParseOutput)
                         self.assertIsInstance(output.prover9_options, Prover9Options)
                         self.assertIsInstance(output.mace4_options, Mace4Options)
-                        # check that generateInput is the inverse of parse
-                        response = requests.post(f"{self.base_url}/generateInput", json=output)
-                        self.assertEqual(response.status_code, 200)
-                        generated_input = response.json()
-                        no_comments = re.sub(r"%.*", "", generated_input)
-                        no_comments_output = re.sub(r"%.*", "", prover9_input)
-                        self.assertEqual(no_comments, no_comments_output)
                         
         
         

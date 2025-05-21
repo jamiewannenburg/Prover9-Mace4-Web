@@ -45,11 +45,11 @@ function App() {
     const isRefresh = sessionStorage.getItem('isRefresh') === 'true';
     if (isRefresh) {
       // Clear all localStorage items except the API URL
-      const apiUrl = localStorage.getItem('prover9_api_url');
+      // const apiUrl = localStorage.getItem('prover9_api_url');
       localStorage.clear();
-      if (apiUrl) {
-        localStorage.setItem('prover9_api_url', apiUrl);
-      }
+      // if (apiUrl) {
+      //   localStorage.setItem('prover9_api_url', apiUrl);
+      // }
       // Clear the refresh flag
       sessionStorage.removeItem('isRefresh');
     }

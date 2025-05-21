@@ -15,6 +15,7 @@ from typing import Dict, Optional, Union
 from datetime import datetime
 #from persistqueue import PDict
 import shelve
+import signal
 
 from p9m4_types import (
     ProgramType, ProcessInfo, ProcessState
@@ -22,21 +23,21 @@ from p9m4_types import (
 from parse import manual_standardize_mace4_output
 from sync_lock import SyncLock
 
-# Global process tracking
-
-PROCESS_QUEUE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
-os.makedirs(PROCESS_QUEUE_PATH, exist_ok=True)
+# get data directory from environment variable
+DATA_DIR = os.getenv('P9M4_DATA_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'))
+os.makedirs(DATA_DIR, exist_ok=True)
 
 # Create subdirectories for process files
-INPUT_DIR = os.path.join(PROCESS_QUEUE_PATH, 'input')
-OUTPUT_DIR = os.path.join(PROCESS_QUEUE_PATH, 'output')
-ERROR_DIR = os.path.join(PROCESS_QUEUE_PATH, 'error')
+INPUT_DIR = os.path.join(DATA_DIR, 'input')
+OUTPUT_DIR = os.path.join(DATA_DIR, 'output')
+ERROR_DIR = os.path.join(DATA_DIR, 'error')
 os.makedirs(INPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(ERROR_DIR, exist_ok=True)
 
-#processes: Dict[int, ProcessInfo] = PDict(PROCESS_QUEUE_PATH,'processes')
-processes = shelve.open(os.path.join(PROCESS_QUEUE_PATH,'processes'),writeback=True)
+# Global process tracking
+#processes: Dict[int, ProcessInfo] = PDict(DATA_DIR,'processes')
+processes = shelve.open(os.path.join(DATA_DIR,'processes'),writeback=True)
 #process_outputs: Dict[int, str] = {}  # Store outputs separately
 #process_lock = threading.Lock()
 process_lock = SyncLock(processes)
@@ -142,6 +143,7 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
             # get text from process outputs
             process_info = processes[str(input_text)]
             with open(process_info.fout_path, 'rb') as f:
+                f.seek(0)
                 input_text = f.read().decode('utf-8', errors='replace')
         # Write input to stdin
         if program in [ProgramType.ISOFILTER, ProgramType.ISOFILTER2]:
@@ -199,39 +201,40 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
 
         # Monitor process
         while process.poll() is None:
+            
+            fout.seek(0)  # rewind
+            # iterate over lines
+            stats = ""
+            started = False
+            domain_size = 0
+            for line in fout:
+                line = line.decode('utf-8', errors='replace')
+                if program in [ProgramType.ISOFILTER, ProgramType.ISOFILTER2]:
+                    if line.startswith("% isofilter"):
+                        stats = line
+                else:
+                    if program == ProgramType.MACE4:
+                        m = re.search(r'DOMAIN SIZE (\d+)', line)
+                        if m:
+                            domain_size = int(m.group(1))
+                    if not started:
+                        if "STATISTICS" in line:
+                            started = True
+                            stats = ""
+                    else:
+                        if line.startswith("==="):
+                            started = False
+                        else:
+                            stats += line
+
+            if domain_size > 0:
+                stats = f"Domain size: {domain_size}\n{stats}"
+
             # Update resource usage
             with process_lock:
-                processes[str(process_id)].resource_usage = get_process_stats(process.pid)
-            
-                fout.seek(0)  # rewind
-                # iterate over lines
-                stats = ""
-                started = False
-                domain_size = 0
-                for line in fout:
-                    line = line.decode('utf-8', errors='replace')
-                    if program in [ProgramType.ISOFILTER, ProgramType.ISOFILTER2]:
-                        if line.startswith("% isofilter"):
-                            stats = line
-                    else:
-                        if program == ProgramType.MACE4:
-                            m = re.search(r'DOMAIN SIZE (\d+)', line)
-                            if m:
-                                domain_size = int(m.group(1))
-                        if not started:
-                            if "STATISTICS" in line:
-                                started = True
-                                stats = ""
-                        else:
-                            if line.startswith("==="):
-                                started = False
-                            else:
-                                stats += line
-
-                if domain_size > 0:
-                    stats = f"Domain size: {domain_size}\n{stats}"
-
+                processes[str(process_id)].resource_usage = get_process_stats(process.pid)            
                 processes[str(process_id)].stats = stats
+
             # Check if process was killed
             if processes[str(process_id)].state == ProcessState.KILLED:
                 process.terminate()
@@ -265,9 +268,81 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
         # os.unlink(fout.name)
         # os.unlink(ferr.name)
 
+def kill_process(process_id: int, ):
+    """Kill a process"""
+    
+    with process_lock:
+        if str(process_id) not in processes:
+            return False
+        process_info = processes[str(process_id)]
+        if process_info.state not in [ProcessState.RUNNING, ProcessState.SUSPENDED]:
+            return False
+        if os.name == 'nt':
+            os.kill(process_info.pid, signal.SIGTERM)
+        else:
+            os.kill(process_info.pid, signal.SIGKILL)
+        processes[str(process_id)].state = ProcessState.KILLED
+        return True
+
+def kill_process_safely(process_id: int):
+    """Kill a process safely"""
+    process_info = processes[str(process_id)]
+    success = kill_process(process_id)
+    if success: # process was killed
+        # wait for process to exit
+        while process_info.pid in psutil.process_iter():
+            time.sleep(0.1)
+    else: # process was not killed
+        # should already be killed but kill it if it is not
+        if process_info.pid in psutil.process_iter():
+            if os.name == 'nt':
+                os.kill(process_info.pid, signal.SIGTERM)
+            else:
+                os.kill(process_info.pid, signal.SIGKILL)
+            while process_info.pid in psutil.process_iter():
+                time.sleep(0.1)
+    return process_info.pid not in psutil.psutil.process_iter()
+
+def remove_process(process_id: int):
+    """Remove a process"""
+    with process_lock:
+        if str(process_id) not in processes:
+            return False
+        process_info = processes[str(process_id)]
+        if process_info.state in [ProcessState.RUNNING, ProcessState.SUSPENDED]:
+            # kill the process
+            kill_process(process_id)
+        # Clean up files
+        if process_info.fin_path and os.path.exists(process_info.fin_path):
+            os.unlink(process_info.fin_path)
+        if process_info.fout_path and os.path.exists(process_info.fout_path):
+            os.unlink(process_info.fout_path)
+        if process_info.ferr_path and os.path.exists(process_info.ferr_path):
+            os.unlink(process_info.ferr_path)
+
+        del processes[str(process_id)]
+        # if process_id in process_outputs:
+        #     del process_outputs[process_id]
+        return True
+
+def clean_up():
+    """Clean up all processes"""
+    # Kill any running processes
+    for process_id in processes:
+        success = kill_process_safely(process_id)
+        if success:
+            # put state back to running
+            with process_lock:
+                processes[str(process_id)].state = ProcessState.RUNNING
+        
+    # Close the shelve database
+    processes.close()
+                
+
 def rerun_processes():
     """Rerun processes that are still running after a restart"""
     for process_id, process_info in processes.items():
         if process_info.state == ProcessState.RUNNING:
-            run_program(process_info.program, process_info.input, int(process_id), process_info.options)
+            # start process again in a new thread
+            threading.Thread(target=run_program, args=(process_info.program, process_info.input, int(process_id), process_info.options)).start()
 rerun_processes()

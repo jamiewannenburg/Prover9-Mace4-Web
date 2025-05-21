@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from contextlib import asynccontextmanager
 
 from p9m4_types import (
     ProgramInput, ParseInput, ParseOutput, ProgramType, ProcessInfo, 
@@ -30,14 +31,23 @@ from process_handler import (
     run_program, 
     #get_prover9_stats, get_mace4_stats, get_isofilter_stats
     #, process_outputs
-    processes
+    processes,
+    clean_up
 )
+from process_handler import remove_process as remove_process_handler
+from process_handler import kill_process as kill_process_handler
 
 # Constants
 BIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin')
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    # Clean up processes and close the shelve database when the application shuts down
+    clean_up()
+
 # FastAPI app
-app = FastAPI(title="Prover9-Mace4 API")
+app = FastAPI(title="Prover9-Mace4 API", lifespan=lifespan)
 
 # Add CORS middleware
 app.add_middleware(
@@ -47,33 +57,6 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Clean up processes and close the shelve database when the application shuts down."""
-    #with process_lock:
-    # Kill any running processes
-    for process_id in processes:
-        process_info = processes[str(process_id)]
-        if process_info.state in [ProcessState.RUNNING, ProcessState.SUSPENDED, ProcessState.READY]:
-            try:
-                if os.name == 'nt':
-                    os.kill(process_info.pid, signal.SIGINT)
-                else:
-                    os.kill(process_info.pid, signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                pass  # Process might already be gone
-            
-            # # Clean up files
-            # if process_info.fin_path and os.path.exists(process_info.fin_path):
-            #     os.unlink(process_info.fin_path)
-            # if process_info.fout_path and os.path.exists(process_info.fout_path):
-            #     os.unlink(process_info.fout_path)
-            # if process_info.ferr_path and os.path.exists(process_info.ferr_path):
-            #     os.unlink(process_info.ferr_path)
-    
-    # Close the shelve database
-    processes.close()
 
 @app.post("/start")
 async def start_program(input: ProgramInput, background_tasks: BackgroundTasks) -> Dict:
@@ -102,34 +85,26 @@ async def start_program(input: ProgramInput, background_tasks: BackgroundTasks) 
 @app.get("/status/{process_id}")
 async def get_status(process_id: int) -> ProcessInfo:
     """Get the status of a process"""
-    with process_lock:
-        if str(process_id) not in processes:
-            raise HTTPException(status_code=404, detail="Process not found")
-        return processes[str(process_id)]
+    if str(process_id) not in processes:
+        raise HTTPException(status_code=404, detail="Process not found")
+    return processes[str(process_id)]
 
 @app.get("/processes")
 async def list_processes() -> List[int]:
     """List all tracked processes"""
-    with process_lock:
-        return [int(process_id) for process_id in processes]
+    return [int(process_id) for process_id in processes]
 
 @app.post("/kill/{process_id}")
 async def kill_process(process_id: int) -> Dict:
     """Kill a running process"""
-    with process_lock:
-        if str(process_id) not in processes:
-            raise HTTPException(status_code=404, detail="Process not found")
-        
-        process_info = processes[str(process_id)]
-        if process_info.state not in [ProcessState.RUNNING, ProcessState.SUSPENDED, ProcessState.READY]:
-            raise HTTPException(status_code=400, detail="Process is not running or suspended")
-        
-        if os.name == 'nt':
-            os.kill(process_info.pid, signal.SIGINT)
-        else:
-            os.kill(process_info.pid, signal.SIGKILL)
-        processes[str(process_id)].state = ProcessState.KILLED
-        return {"status": "success", "message": f"Process {process_id} killed"}
+    if str(process_id) not in processes:
+        raise HTTPException(status_code=404, detail="Process not found")
+    
+    success = kill_process_handler(process_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="Process is not running or suspended")
+    
+    return {"status": "success", "message": f"Process {process_id} killed"}
 
 @app.get('/download/{process_id}')
 async def download_process(process_id: int) -> StreamingResponse:
@@ -218,26 +193,10 @@ async def get_process_output(process_id: int, page: Optional[int] = None, page_s
 @app.delete("/process/{process_id}")
 async def remove_process(process_id: int) -> Dict:
     """Remove a completed process from the list"""
-    with process_lock:
-        if str(process_id) not in processes:
-            raise HTTPException(status_code=404, detail="Process not found")
-        
-        process_info = processes[str(process_id)]
-        if process_info.state not in [ProcessState.DONE, ProcessState.ERROR, ProcessState.KILLED]:
-            raise HTTPException(status_code=400, detail="Can only remove completed, errored, or killed processes")
-        
-        # Clean up files
-        if process_info.fin_path and os.path.exists(process_info.fin_path):
-            os.unlink(process_info.fin_path)
-        if process_info.fout_path and os.path.exists(process_info.fout_path):
-            os.unlink(process_info.fout_path)
-        if process_info.ferr_path and os.path.exists(process_info.ferr_path):
-            os.unlink(process_info.ferr_path)
-
-        del processes[str(process_id)]
-        # if process_id in process_outputs:
-        #     del process_outputs[process_id]
-        return {"status": "success", "message": f"Process {process_id} removed"}
+    success = remove_process_handler(process_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Process not found")
+    return {"status": "success", "message": f"Process {process_id} removed"}
 
 @app.post("/pause/{process_id}")
 async def pause_process(process_id: int) -> Dict:

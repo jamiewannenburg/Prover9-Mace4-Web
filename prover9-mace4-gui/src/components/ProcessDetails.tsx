@@ -23,6 +23,7 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const outputRef = useRef<HTMLPreElement>(null);
   const prevProcessIdRef = useRef<number | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const PAGE_SIZE = 100;
   
   const selectedProcess = processes.find(p => p.id === processId);
@@ -65,32 +66,43 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
   };
   
   useEffect(() => {
-    if (!processId) {
+    // Clear any existing polling
+    const cleanup = () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+
+    // Reset state when no process is selected
+    if (!processId || !selectedProcess) {
+      cleanup();
       setOutput('');
       setPage(1);
       setHasMore(true);
       prevProcessIdRef.current = null;
       return;
     }
-    
-    if (selectedProcess?.state === 'running') {
-      prevProcessIdRef.current = null;// Start polling for the new process output
-      const pollInterval = setInterval(async () => {
-        if (processId !== prevProcessIdRef.current || selectedProcess?.state !== 'running')
-        {
-          clearInterval(pollInterval);
-        } else {
-          fetchOutput(1, false);
-        }
+    //fetchOutput(1, false);
+    // Start polling if process is running
+    if (selectedProcess.state === 'running') {
+      cleanup(); // Clear any existing polling
+      pollIntervalRef.current = setInterval(() => {
+        fetchOutput(1, false);
       }, 1000);
+    } else {
+      cleanup();
     }
 
-    // Only fetch output if processId has changed or the process is running
+    // Fetch initial output when process changes
     if (processId !== prevProcessIdRef.current) {
       fetchOutput(1, false);
       prevProcessIdRef.current = processId;
     }
-  }, [processId]); // Remove apiUrl from dependencies since it shouldn't trigger a refresh
+
+    // // Cleanup on unmount or when dependencies change
+    // return cleanup;
+  }, [processId, selectedProcess]); // Depend on the entire selectedProcess object
   
   const downloadOutput = async () => {
     if (!processId || !output) return;
