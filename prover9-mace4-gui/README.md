@@ -74,6 +74,12 @@ docker tag prover9-mace4-web-gui yourusername/prover9-mace4-web-gui:latest
 docker push yourusername/prover9-mace4-web-gui:latest
 ```
 
+For example:
+```bash
+docker tag prover9-mace4-web-gui jamiewannenburg/prover9-mace4-web-gui:latest
+docker push jamiewannenburg/prover9-mace4-web-gui:latest
+```
+
 3. Access the application at [http://localhost](http://localhost)
 
 Enter the url of a running api server.
