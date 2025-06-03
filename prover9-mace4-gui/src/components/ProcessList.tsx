@@ -76,13 +76,16 @@ const ProcessList: React.FC<ProcessListProps> = ({
       const response = await fetch(`${apiUrl}/process/${id}`, {
         method: 'DELETE',
       });
-      
+      console.log(response);
+      const msg = await response.json();
+      console.log(apiUrl,msg)
       if (response.ok) {
         if (selectedProcess === id) {
           onSelectProcess(null);
         }
         refreshProcesses();
       } else {
+        console.log(msg);
         alert('Failed to remove process');
       }
     } catch (error) {
