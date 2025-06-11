@@ -70,6 +70,7 @@ async def start_program(input: ProgramInput, background_tasks: BackgroundTasks) 
         state=ProcessState.READY,
         program=input.program,
         input=input.input,
+        name=input.name,
         options=input.options
     )
 

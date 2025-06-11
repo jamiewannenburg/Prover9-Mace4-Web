@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Button, ButtonGroup, Alert, Row, Col, Modal } from 'react-bootstrap';
+import { Button, ButtonGroup, Alert, Row, Col, Modal, Form } from 'react-bootstrap';
 import { SampleNode, SampleTreeProps, Mace4Options, Prover9Options, ParseOutput, Flag, IntegerParameter, GuiOutput, INTERP_FORMATS, InterpFormat } from '../types';
 import { useFormulas } from '../context/FormulaContext';
 import { useMace4Options } from '../context/Mace4OptionsContext';
@@ -80,6 +80,7 @@ interface RunPanelProps {
 const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [processName, setProcessName] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showSampleSelector, setShowSampleSelector] = useState(false);
   const [samples, setSamples] = useState<SampleNode[]>([]);
@@ -146,6 +147,7 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
         body: JSON.stringify({
           program: 'prover9',
           input,
+          name: processName || `Prover9_${new Date().toISOString()}`
         }),
       });
 
@@ -182,6 +184,7 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
         body: JSON.stringify({
           program: 'mace4',
           input,
+          name: processName || `Mace4_${new Date().toISOString()}`
         }),
       });
 
@@ -235,6 +238,9 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
 
     try {
       const content = await file.text();
+      // Set process name based on filename
+      const name = file.name.endsWith('.in') ? file.name.slice(0, -3) : file.name;
+      setProcessName(name);
       await handleFileContent(content, file.name);
     } catch (error) {
       alert(`Error opening file ${file.name}`);
@@ -276,6 +282,9 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
       
       if (response.ok) {
         const content = await response.text();
+        // Set process name based on sample path
+        const name = path.endsWith('.in') ? path.slice(0, -3) : path;
+        setProcessName(name);
         await handleFileContent(content, path);
       }
     } catch (error) {
@@ -355,6 +364,13 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
         </Col>
         <Col md={6}>
           <ButtonGroup>
+            <Form.Control
+              type="text"
+              placeholder="Process name"
+              value={processName}
+              onChange={(e) => setProcessName(e.target.value)}
+              style={{ width: '200px', marginRight: '10px' }}
+            />
             <Button variant="outline-primary" onClick={saveInput}>
               💾 Save
             </Button>

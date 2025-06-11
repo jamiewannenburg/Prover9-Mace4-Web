@@ -134,6 +134,7 @@ export interface Process {
   program: ProgramType;
   state: ProcessState;
   start_time: string;
+  name?: string;
   input?: string | number;
   error?: string;
   exit_code?: number;

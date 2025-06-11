@@ -133,10 +133,16 @@ def run_program(program: ProgramType, input_text: Union[str,int], process_id: in
             processes[str(str(process_id))].error = f"{program.value} binary not found or not executable"
         return
 
+    # Get process name for file prefix
+    with process_lock:
+        process_info = processes[str(process_id)]
+        name_prefix = process_info.name.replace(' ', '_') if process_info.name else ''
+        file_prefix = f"{name_prefix}_{process_id}" if name_prefix else f"{process_id}_"
+
     # Create temporary files in data directories
-    fin = tempfile.NamedTemporaryFile('w+b', dir=INPUT_DIR, prefix=f"{process_id}_", suffix='.in', delete=False)
-    fout = tempfile.NamedTemporaryFile('w+b', dir=OUTPUT_DIR, prefix=f"{process_id}_", suffix='.out', delete=False)
-    ferr = tempfile.NamedTemporaryFile('w+b', dir=ERROR_DIR, prefix=f"{process_id}_", suffix='.err', delete=False)
+    fin = tempfile.NamedTemporaryFile('w+b', dir=INPUT_DIR, prefix=file_prefix, suffix='.in', delete=False)
+    fout = tempfile.NamedTemporaryFile('w+b', dir=OUTPUT_DIR, prefix=file_prefix, suffix='.out', delete=False)
+    ferr = tempfile.NamedTemporaryFile('w+b', dir=ERROR_DIR, prefix=file_prefix, suffix='.err', delete=False)
 
     try:
         if isinstance(input_text, int):

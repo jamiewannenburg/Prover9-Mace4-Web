@@ -26,6 +26,7 @@ class ProgramType(Enum):
 class ProgramInput(BaseModel):
     program: ProgramType
     input: Union[str, int]
+    name: Optional[str] = None  # Optional name for the process
     options: Optional[Dict] = None
 
 class ProcessInfo(BaseModel):
@@ -34,6 +35,7 @@ class ProcessInfo(BaseModel):
     state: ProcessState
     program: ProgramType
     input: Union[str, int]
+    name: Optional[str] = None  # Optional name for the process
     error: Optional[str] = None
     exit_code: Optional[int] = None
     stats: Optional[str] = None

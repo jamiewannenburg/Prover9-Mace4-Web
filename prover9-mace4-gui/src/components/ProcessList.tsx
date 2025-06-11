@@ -123,6 +123,7 @@ const ProcessList: React.FC<ProcessListProps> = ({
         <thead>
           <tr>
             <th>ID</th>
+            <th>Name</th>
             <th>Program</th>
             <th>Status</th>
             <th>Duration</th>
@@ -132,7 +133,7 @@ const ProcessList: React.FC<ProcessListProps> = ({
         <tbody>
           {processes.length === 0 ? (
             <tr key="processempty-state">
-              <td colSpan={5} className="text-center">No processes running</td>
+              <td colSpan={6} className="text-center">No processes running</td>
             </tr>
           ) : (
             processes.map(process => {
@@ -149,6 +150,7 @@ const ProcessList: React.FC<ProcessListProps> = ({
                   }}
                 >
                   <td>{process.id}</td>
+                  <td>{process.name || 'Unnamed'}</td>
                   <td>{process.program}</td>
                   <td>{getStatusBadge(process.state)}</td>
                   <td>{calculateDuration(process.start_time)}</td>

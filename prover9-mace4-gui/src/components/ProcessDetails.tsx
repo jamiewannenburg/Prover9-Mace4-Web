@@ -274,6 +274,7 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ processId, processes, a
     const duration = (new Date().getTime() - startTime.getTime()) / 1000;
     
     const info = [
+      `Name: ${process.name || 'Unnamed'}`,
       `Program: ${process.program}`,
       `Status: ${process.state}`,
       `Duration: ${formatDuration(duration)}`
