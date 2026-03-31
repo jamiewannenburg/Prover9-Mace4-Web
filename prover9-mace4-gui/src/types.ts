@@ -129,6 +129,7 @@ export interface ProcessOutput {
   has_more: boolean;
 }
 
+/** Legacy process row from the pre-run API; prefer {@link RunSummary} for new code. */
 export interface Process {
   id: number;
   program: ProgramType;
@@ -264,6 +265,98 @@ export interface ProgramInput {
   program: ProgramType;
   input: string;
   options?: Record<string, any>;
+}
+
+/** API v2: persisted vs stream delivery (matches `DeliveryMode` in p9m4_types.py). */
+export type DeliveryMode = "persisted" | "stream";
+
+/** Tagged input kinds for `ProgramRunRequestV2` (matches `InputKind` in p9m4_types.py). */
+export type InputKind = "text" | "file" | "process_output";
+
+export interface TextInputSource {
+  kind: "text";
+  text: string;
+}
+
+export interface FileInputSource {
+  kind: "file";
+  file_ref: string;
+}
+
+export interface ProcessOutputInputSource {
+  kind: "process_output";
+  run_id: string;
+  artifact: string;
+}
+
+/** Discriminated union for `ProgramRunRequestV2.input`. */
+export type ProgramInputSource =
+  | TextInputSource
+  | FileInputSource
+  | ProcessOutputInputSource;
+
+/** Request body for POST `/prover9`, `/mace4`, `/prooftrans`, etc. */
+export interface ProgramRunRequestV2 {
+  input: ProgramInputSource;
+  name?: string;
+  options?: Record<string, string | number | boolean>;
+  delivery_mode?: DeliveryMode;
+}
+
+/** Response when a run is accepted (matches `RunAccepted` in p9m4_types.py). */
+export interface RunAccepted {
+  run_id: string;
+  program: ProgramType;
+  delivery_mode: DeliveryMode;
+  lifecycle: string;
+  created_at: string;
+  stream_url?: string | null;
+}
+
+/** Persisted run row from `GET /runs` / `GET /runs/{id}/status` (matches `RunSummary`). */
+export interface RunSummary {
+  run_id: string;
+  name?: string | null;
+  program: ProgramType;
+  delivery_mode: DeliveryMode;
+  lifecycle: string;
+  created_at: string;
+  completed_at?: string | null;
+  source_run_id?: string | null;
+  source_artifact?: string | null;
+  error?: string | null;
+}
+
+/** Values returned for a single artifact key (string or structured JSON). */
+export type ArtifactContent = string | Record<string, unknown> | unknown[];
+
+/** `GET /runs/{run_id}/artifacts/{artifact}` JSON body. */
+export interface RunArtifactPayload {
+  run_id: string;
+  artifact: string;
+  content: ArtifactContent;
+}
+
+/** `GET /runs/{run_id}/artifacts` JSON body (matches `RunArtifacts`). */
+export interface RunArtifactsPayload {
+  run_id: string;
+  artifacts: Record<string, ArtifactContent>;
+}
+
+/** Parsed SSE JSON payload (matches `StreamEvent` in p9m4_types.py; `ts` is ISO from the server). */
+export interface StreamEvent {
+  event: string;
+  run_id: string;
+  program: ProgramType;
+  lifecycle?: string | null;
+  data?: ArtifactContent | null;
+  ts: string;
+}
+
+/** Result of `DELETE /runs/{id}` or `POST /runs/{id}/cancel`. */
+export interface RunMutationResult {
+  status: string;
+  message: string;
 }
 
 export interface ParseOutput {
