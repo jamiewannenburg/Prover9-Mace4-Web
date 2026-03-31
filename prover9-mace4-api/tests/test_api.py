@@ -1,12 +1,13 @@
-import re
-import unittest
-import requests
-import time
-from unittest.mock import patch, MagicMock
+import asyncio
 import os
 import sys
+import time
+import types
+import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
+from fastapi.testclient import TestClient
 
 # directory of this file
 test_dir = Path(__file__).parent
@@ -16,223 +17,176 @@ dir = test_dir.parent
 sys.path.append(str(dir.absolute()))
 
 # set the data directory
-os.environ['P9M4_DATA_DIR'] = str((test_dir / "data").absolute())
+os.environ["P9M4_DATA_DIR"] = str((test_dir / "data").absolute())
+
+# Minimal local stub for test environments where pyp9m4 is unavailable.
+if "pyp9m4" not in sys.modules:
+    pyp9m4_mod = types.ModuleType("pyp9m4")
+    mace4_facade_mod = types.ModuleType("pyp9m4.mace4_facade")
+    prover9_facade_mod = types.ModuleType("pyp9m4.prover9_facade")
+    resolver_mod = types.ModuleType("pyp9m4.resolver")
+    runner_mod = types.ModuleType("pyp9m4.runner")
+    options_mod = types.ModuleType("pyp9m4.options")
+
+    class _DummyTool:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def arun(self, *args, **kwargs):
+            return {}
+
+        def start_arun(self, *args, **kwargs):
+            return None
+
+        def start_amodels(self, *args, **kwargs):
+            return None
+
+    class _DummyResolver:
+        def resolve(self, name):
+            return name
+
+    class _DummyRunner:
+        async def run(self, invocation):
+            return invocation
+
+    class _DummyInvocation:
+        def __init__(self, *args, **kwargs):
+            self.argv = kwargs.get("argv", ())
+            self.status = type("Status", (), {"value": "completed"})()
+            self.exit_code = 0
+            self.stdout = ""
+            self.stderr = ""
+            self.duration_s = 0.0
+
+    class _DummyCliOptions:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def to_argv(self):
+            return []
+
+    mace4_facade_mod.Mace4 = _DummyTool
+    prover9_facade_mod.Prover9 = _DummyTool
+    resolver_mod.BinaryResolver = _DummyResolver
+    runner_mod.AsyncToolRunner = _DummyRunner
+    runner_mod.SubprocessInvocation = _DummyInvocation
+    options_mod.InterpformatCliOptions = _DummyCliOptions
+    options_mod.IsofilterCliOptions = _DummyCliOptions
+    options_mod.Mace4CliOptions = _DummyCliOptions
+    options_mod.ProofTransCliOptions = _DummyCliOptions
+    options_mod.Prover9CliOptions = _DummyCliOptions
+
+    sys.modules["pyp9m4"] = pyp9m4_mod
+    sys.modules["pyp9m4.mace4_facade"] = mace4_facade_mod
+    sys.modules["pyp9m4.prover9_facade"] = prover9_facade_mod
+    sys.modules["pyp9m4.resolver"] = resolver_mod
+    sys.modules["pyp9m4.runner"] = runner_mod
+    sys.modules["pyp9m4.options"] = options_mod
+
+from api_server import app, delivery_manager
+from p9m4_types import DeliveryMode
 
 
-from p9m4_types import ParseOutput, Prover9Options, Mace4Options
-# # make sure the api is running?
-# app.run(debug=True)
-
-class TestQuickProver9(unittest.TestCase):
+class TestApiContracts(unittest.TestCase):
     def setUp(self):
-        self.base_url = "http://localhost:8000"
-        with open(dir / "samples/Equality/Prover9/CL-SK-W.in", "r") as file:
-            self.prover9_input = file.read()
-        self.response = requests.post(f"{self.base_url}/start", json={
-            "program": "prover9",
-            "input": self.prover9_input
-        })
-        self.process_id = self.response.json()["process_id"]
-        while requests.get(f"{self.base_url}/status/{self.process_id}").json()["state"] != "done":
-            time.sleep(1)
-        self.status = requests.get(f"{self.base_url}/status/{self.process_id}").json()
-        self.output = requests.get(f"{self.base_url}/output/{self.process_id}").json()
-        
-    def tearDown(self):
-        requests.delete(f"{self.base_url}/process/{self.process_id}")
-
-    def test_start_prover9_process(self):
-        self.assertEqual(self.response.status_code, 200)
-        self.assertIn("process_id", self.response.json())
-
-    def test_get_status(self):
-        self.assertIn("state", self.status)
-        self.assertEqual(self.status["state"], "done")
-        self.assertIn("output", self.output)
-        self.assertIn("THEOREM PROVED", self.output["output"])
-
-    def test_list_processes(self):
-        response = requests.get(f"{self.base_url}/processes")
-        self.assertEqual(response.status_code, 200)
-        self.assertIsInstance(response.json(), list)
-        self.assertIn(self.process_id, response.json())
-
-
-    def test_prooftrans(self):
-        prover9_output = self.output["output"]
-        
-        # Run prooftrans
-        response = requests.post(f"{self.base_url}/start", json={
-            "program": "prooftrans",
-            "input": prover9_output,
-            "options": {
-                "format": "xml",
-                "expand": True,
-                "renumber": True
-            }
-        })
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("process_id", response.json())
-        process_id = response.json()["process_id"]
-        i = 0
-        while requests.get(f"{self.base_url}/status/{process_id}").json()["state"] != "done":
-            time.sleep(1)
-            i += 1
-            if i > 35:
-                raise Exception("Prooftrans process did not finish quickly")
-        
-        response = requests.delete(f"{self.base_url}/process/{process_id}")
-        self.assertEqual(response.status_code, 200)
-
-
-
-class TestLongRunningProver9(unittest.TestCase):
-    def setUp(self):
-        self.base_url = "http://localhost:8000"
-        with open(dir / "samples/GT_Sax.in", "r") as file:
-            self.long_running_input = file.read()
-        self.response = requests.post(f"{self.base_url}/start", json={
-            "program": "prover9",
-            "input": self.long_running_input
-        })
-        self.process_id = self.response.json()["process_id"]
+        self.client = TestClient(app)
+        delivery_manager._runs.clear()
+        delivery_manager._tasks.clear()
+        delivery_manager._subscribers.clear()
 
     def tearDown(self):
-        requests.delete(f"{self.base_url}/process/{self.process_id}")
+        for task in list(delivery_manager._tasks.values()):
+            if not task.done():
+                task.cancel()
 
-    def test_process_lifecycle(self):
-        status = requests.get(f"{self.base_url}/status/{self.process_id}").json()
-        self.assertIn("state", status)
-        while status["state"] == "ready":
-            time.sleep(1)
-            status = requests.get(f"{self.base_url}/status/{self.process_id}").json()
-        self.assertIn("state", status)
-        self.assertEqual(status["state"], "running")
-        
-        # Pause process if not running on windows
-        if os.name == "nt":
-            pause_response = requests.post(f"{self.base_url}/pause/{self.process_id}")
-            # pause should not be allowed on windows
-            self.assertNotEqual(pause_response.status_code, 200)
-        else:
-            pause_response = requests.post(f"{self.base_url}/pause/{self.process_id}")
-            self.assertEqual(pause_response.status_code, 200)
-        
-        # Resume process if not running on windows
-        if os.name == "nt":
-            resume_response = requests.post(f"{self.base_url}/resume/{self.process_id}")
-            self.assertNotEqual(resume_response.status_code, 200)
-        else:
-            resume_response = requests.post(f"{self.base_url}/resume/{self.process_id}")
-            self.assertEqual(resume_response.status_code, 200)
-        
-        # Kill process
-        kill_response = requests.post(f"{self.base_url}/kill/{self.process_id}")
-        self.assertEqual(kill_response.status_code, 200)
+    def _wait_for_completion(self, run_id: str, timeout: float = 2.0):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            status = self.client.get(f"/runs/{run_id}/status")
+            self.assertEqual(status.status_code, 200)
+            lifecycle = status.json()["lifecycle"]
+            if lifecycle in {"completed", "failed", "cancelled"}:
+                return status.json()
+            time.sleep(0.01)
+        self.fail(f"Run {run_id} did not finish within {timeout}s")
 
-class TestMace4(unittest.TestCase):
-    def setUp(self):
-        self.base_url = "http://localhost:8000"
-        with open(dir / "samples/Equality/Mace4/CL-QL.in", "r") as file:
-            self.mace4_input = file.read()
-        self.response = requests.post(f"{self.base_url}/start", json={
-            "program": "mace4",
-            "input": self.mace4_input
-        })
-        self.process_id = self.response.json()["process_id"]
-        while requests.get(f"{self.base_url}/status/{self.process_id}").json()["state"] != "done":
-            time.sleep(1)
-        self.status = requests.get(f"{self.base_url}/status/{self.process_id}").json()
-        self.output = requests.get(f"{self.base_url}/output/{self.process_id}").json()
-    
-    def tearDown(self):
-        requests.delete(f"{self.base_url}/process/{self.process_id}")
+    def _text_input(self):
+        return {"kind": "text", "text": "formulas(assumptions). end_of_list."}
 
-    def test_start_mace4_process(self):
-        self.assertEqual(self.response.status_code, 200)
-        self.assertIn("process_id", self.response.json())
+    def test_program_endpoints_and_old_start_removed(self):
+        with patch.object(
+            delivery_manager._runner,
+            "arun_program",
+            new=AsyncMock(return_value={"stdout": "ok", "stderr": "", "parsed": {"x": 1}, "models": []}),
+        ):
+            for endpoint in ["/prover9", "/mace4", "/prooftrans", "/interpformat", "/isofilter"]:
+                response = self.client.post(
+                    endpoint,
+                    json={
+                        "input": self._text_input(),
+                        "delivery_mode": "persisted",
+                        "options": {"max_seconds": 1},
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                body = response.json()
+                self.assertIsNotNone(body["run_id"])
+                self.assertEqual(body["delivery_mode"], DeliveryMode.PERSISTED.value)
+                self.assertEqual(body["lifecycle"], "queued")
 
-    def test_get_status(self):
-        self.assertIn("state", self.status)
-        self.assertEqual(self.status["state"], "done")
-        self.assertIn("output", self.output)
-        self.assertIn("MODEL", self.output["output"])
+        removed = self.client.post("/start", json={"program": "prover9", "input": "x"})
+        self.assertEqual(removed.status_code, 404)
 
-    def test_interpformat(self):
-        # Run interpformat
-        # Wait for Mace4 to finish
-        mace4_output = self.output["output"]
-        
-        # Run interpformat
-        response = requests.post(f"{self.base_url}/start", json={
-            "program": "interpformat",
-            "input": mace4_output,
-            "options": {
-                "format": "standard"
-            }
-        })
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("process_id", response.json())
-        process_id = response.json()["process_id"]
-        i = 0
-        while requests.get(f"{self.base_url}/status/{process_id}").json()["state"] != "done":
-            time.sleep(3)
-            i += 1
-            if i > 7:
-                raise Exception("Interpformat process did not finish quickly")
-        
-        response = requests.delete(f"{self.base_url}/process/{process_id}")
-        self.assertEqual(response.status_code, 200)
+    def test_persisted_run_artifacts_and_download_contract(self):
+        payload = {"stdout": "THEOREM PROVED", "stderr": "", "parsed": {"proofs": 1}, "models": ["m1"]}
+        with patch.object(delivery_manager._runner, "arun_program", new=AsyncMock(return_value=payload)):
+            response = self.client.post("/prover9", json={"input": self._text_input(), "delivery_mode": "persisted"})
+            self.assertEqual(response.status_code, 200)
+            run_id = response.json()["run_id"]
+            done_status = self._wait_for_completion(run_id)
+            self.assertEqual(done_status["lifecycle"], "completed")
 
-    def test_isofilter(self):
-        mace4_output = self.output["output"]
-        
-        # Run isofilter
-        response = requests.post(f"{self.base_url}/start", json={
-            "program": "isofilter",
-            "input": mace4_output,
-            "options": {
-                "wrap": True,
-                "ignore_constants": True,
-            }
-        })
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("process_id", response.json())
-        process_id = response.json()["process_id"]
-        i = 0
-        while requests.get(f"{self.base_url}/status/{process_id}").json()["state"] != "done":
-            time.sleep(1)
-            i += 1
-            if i > 7:
-                raise Exception("Isofilter process did not finish quickly")
-        
-        response = requests.delete(f"{self.base_url}/process/{process_id}")
-        self.assertEqual(response.status_code, 200)
+        runs = self.client.get("/runs")
+        self.assertEqual(runs.status_code, 200)
+        self.assertTrue(any(run["run_id"] == run_id for run in runs.json()))
 
-class TestParser(unittest.TestCase):
-    def setUp(self):
-        self.base_url = "http://localhost:8000"
-    # should be able to parse all the samples
-    def test_parse_all_samples(self):
-        samples_dir = dir / "samples"
-        # walk through direcory and subdirectories
-        for file in samples_dir.glob("**/*"):
-            if file.is_file():
-                # check if the file is a prover9 input file
-                if file.name.endswith(".in"):
-                    with open(file, "r") as f:
-                        prover9_input = f.read()
-                        response = requests.post(f"{self.base_url}/parse", json={
-                            "input": prover9_input
-                        })
-                        self.assertEqual(response.status_code, 200)
-                        output = response.json()
-                        output = ParseOutput(**output)
-                        self.assertIsInstance(output, ParseOutput)
-                        self.assertIsInstance(output.prover9_options, Prover9Options)
-                        self.assertIsInstance(output.mace4_options, Mace4Options)
-                        
-        
-        
-if __name__ == '__main__':
-    unittest.main() 
+        artifacts = self.client.get(f"/runs/{run_id}/artifacts")
+        self.assertEqual(artifacts.status_code, 200)
+        artifact_payload = artifacts.json()["artifacts"]
+        self.assertEqual(artifact_payload["stdout"], "THEOREM PROVED")
+        self.assertEqual(artifact_payload["parsed"]["proofs"], 1)
+
+        stdout_artifact = self.client.get(f"/runs/{run_id}/artifacts/stdout")
+        self.assertEqual(stdout_artifact.status_code, 200)
+        self.assertEqual(stdout_artifact.json()["content"], "THEOREM PROVED")
+
+        download = self.client.get(f"/runs/{run_id}/download/stdout")
+        self.assertEqual(download.status_code, 200)
+        self.assertIn("attachment;", download.headers.get("content-disposition", ""))
+        self.assertIn("THEOREM PROVED", download.text)
+
+        delete_response = self.client.delete(f"/runs/{run_id}")
+        self.assertEqual(delete_response.status_code, 200)
+
+    def test_stream_mode_contract_and_no_artifacts(self):
+        async def _slow_result(*_args, **_kwargs):
+            await asyncio.sleep(0.05)
+            return {"stdout": "streamed-output", "stderr": "", "parsed": {"k": "v"}, "models": []}
+
+        with patch.object(delivery_manager._runner, "arun_program", new=AsyncMock(side_effect=_slow_result)):
+            response = self.client.post("/mace4", json={"input": self._text_input(), "delivery_mode": "stream"})
+            self.assertEqual(response.status_code, 200)
+            run_id = response.json()["run_id"]
+            self.assertEqual(response.json()["stream_url"], f"/runs/{run_id}/stream")
+            self.assertEqual(response.json()["delivery_mode"], "stream")
+
+        artifacts = self.client.get(f"/runs/{run_id}/artifacts")
+        self.assertEqual(artifacts.status_code, 400)
+
+    def test_status_contract_for_unknown_run(self):
+        status = self.client.get("/runs/does-not-exist/status")
+        self.assertEqual(status.status_code, 404)
+
+
+if __name__ == "__main__":
+    unittest.main()

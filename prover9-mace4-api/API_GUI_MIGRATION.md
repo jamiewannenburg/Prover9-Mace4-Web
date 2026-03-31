@@ -126,3 +126,72 @@ Do not expose server file paths or OS process IDs in public contracts.
 - Breaking: remove integer-based implicit chaining (`input: int`) and require explicit `process_output` references.
 - Breaking: replace untyped `options: Dict` with typed, program-specific options.
 - Breaking: process lifecycle APIs move from `process_id` and file-backed outputs to `run_id` and artifact-based retrieval/streaming.
+
+## Frontend migration checklist by file
+
+The frontend migration should be executed file-by-file so API and type changes land coherently.
+
+### `prover9-mace4-gui/src/components/RunPanel.tsx`
+
+- Replace generic launch payload (`program`, free-form `options`) with program-specific request builders:
+  - `buildProver9Request(...)`
+  - `buildMace4Request(...)`
+  - `buildProoftransRequest(...)`
+  - `buildInterpformatRequest(...)`
+  - `buildIsofilterRequest(...)`
+- Add `delivery_mode` selector (`persisted` | `stream`) to launch UI.
+- Replace integer process chaining input with explicit `InputSource` UI:
+  - text input mode (`kind: "text"`)
+  - file reference mode (`kind: "file"`)
+  - persisted-run artifact mode (`kind: "process_output"` with `run_id` + `artifact`)
+- Route submission to per-program endpoints (`/prover9`, `/mace4`, `/prooftrans`, `/interpformat`, `/isofilter`) instead of `/start`.
+- Handle mode-specific launch acknowledgement:
+  - persisted: store `run_id` and fetch lifecycle/output from retrieval endpoints
+  - stream: open SSE channel and render live events
+
+### `prover9-mace4-gui/src/components/ProcessDetails.tsx`
+
+- Rename/retarget process detail state to run detail state (`process_id` -> `run_id`).
+- Replace legacy output fetch (`/output/{process_id}`) with artifact/result fetch APIs (`/runs/{run_id}/output` or `/runs/{run_id}/artifacts/{artifact}`).
+- Add artifact viewer sections keyed by stable artifact names (`stdout`, `stderr`, parsed/model payloads).
+- Add stream-event renderer for `started`, `stdout`, `stderr`, `model`, `completed`, `error`.
+- Remove assumptions about server file paths/PIDs from detail display.
+
+### `prover9-mace4-gui/src/components/ProcessList.tsx`
+
+- Swap list source from `GET /processes` to `GET /runs` (persisted history only).
+- Render typed run summaries (program, lifecycle, created timestamp, delivery mode) instead of raw process IDs.
+- Update row actions:
+  - cancel -> `POST /runs/{run_id}/cancel`
+  - delete -> `DELETE /runs/{run_id}`
+- Remove pause/resume actions unless/until supported by future backend contracts.
+- Include origin/provenance indicators when present (`input_origin`, `source_run_id`, `source_artifact`).
+
+### `prover9-mace4-gui/src/App.tsx`
+
+- Update top-level API client wiring for per-program launch methods and run retrieval APIs.
+- Add shared run-store state that can track both persisted runs and active stream subscriptions.
+- Centralize SSE lifecycle management (subscribe/unsubscribe/reconnect policy) for stream mode runs.
+- Replace legacy process route/state naming with run naming consistently across navigation and props.
+
+### `prover9-mace4-gui/src/types.ts`
+
+- Replace generic `ProgramInput` and weak `options: Record<string, unknown>` shape with explicit per-program request types.
+- Introduce tagged input-source union:
+  - `TextInputSource`
+  - `FileInputSource`
+  - `ProcessOutputInputSource`
+- Introduce shared enums/unions:
+  - `DeliveryMode = "persisted" | "stream"`
+  - `RunLifecycle`
+  - `StreamEvent` discriminated union
+- Replace `ProcessInfo`/`ProcessOutput` with run-oriented models (`RunSummary`, `RunStatus`, `RunArtifacts`, `RunOutcome`).
+- Ensure all frontend API function signatures accept/return these typed contracts.
+
+## Suggested migration order
+
+1. Land `types.ts` contract changes first.
+2. Update API client + `App.tsx` wiring.
+3. Migrate `RunPanel.tsx` launch path to per-program endpoints.
+4. Migrate `ProcessList.tsx` and `ProcessDetails.tsx` to run-based retrieval and controls.
+5. Enable stream-mode UI and SSE rendering as final step.

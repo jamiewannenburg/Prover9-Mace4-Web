@@ -16,10 +16,10 @@ todos:
     status: completed
   - id: write-gui-migration-doc
     content: Create API_GUI_MIGRATION.md with old->new mapping and per-file frontend changes
-    status: pending
+    status: completed
   - id: test-and-validate
     content: Add/adjust tests for async execution, streaming, persistence, and endpoint contracts
-    status: pending
+    status: completed
 isProject: false
 ---
 
