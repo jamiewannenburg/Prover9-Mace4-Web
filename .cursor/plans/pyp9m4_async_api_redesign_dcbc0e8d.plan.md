@@ -7,13 +7,13 @@ todos:
     status: completed
   - id: build-pyp9m4-runner
     content: Implement async pyp9m4 runner service and option mapping layer
-    status: pending
+    status: completed
   - id: replace-routes
     content: Implement new program-specific FastAPI routes and remove generic /start flow
-    status: pending
+    status: completed
   - id: add-delivery-modes
     content: Implement persisted store and SSE stream pathways with lifecycle events and chained input references
-    status: pending
+    status: completed
   - id: write-gui-migration-doc
     content: Create API_GUI_MIGRATION.md with old->new mapping and per-file frontend changes
     status: pending

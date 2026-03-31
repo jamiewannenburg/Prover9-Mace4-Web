@@ -6,36 +6,28 @@ A FastAPI-based REST API for Prover9 and Mace4
 
 import argparse
 import os
-import sys
-import time
-import signal
-from typing import Dict, List, Optional, Union
-from datetime import datetime
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Response
+from typing import Dict, List
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, PlainTextResponse
 from contextlib import asynccontextmanager
 
 from p9m4_types import (
-    ProgramInput, ParseInput, ParseOutput, ProgramType, ProcessInfo, 
-    ProcessState, GuiOutput, ProcessOutput, Parameter, Flag, Mace4Options, Prover9Options
+    ParseInput,
+    ParseOutput,
+    ProgramRunRequestV2,
+    ProgramType,
+    GuiOutput,
+    RunAccepted,
+    RunArtifacts,
+    RunSummary,
 )
+from delivery_manager import DeliveryManager
 
 from parse import parse_string
 from parse import generate_input as p9m4_generate_input
 from pyparsing import ParseException
-# TODO should not need process_lock any more
-from process_handler import (
-    process_lock, processes,
-    run_program, 
-    #get_prover9_stats, get_mace4_stats, get_isofilter_stats
-    #, process_outputs
-    processes,
-    clean_up
-)
-from process_handler import remove_process as remove_process_handler
-from process_handler import kill_process as kill_process_handler
 
 # Constants
 BIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin')
@@ -43,11 +35,10 @@ BIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin')
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
-    # Clean up processes and close the shelve database when the application shuts down
-    clean_up()
 
 # FastAPI app
 app = FastAPI(title="Prover9-Mace4 API", lifespan=lifespan)
+delivery_manager = DeliveryManager()
 
 # Add CORS middleware
 app.add_middleware(
@@ -58,182 +49,98 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-@app.post("/start")
-async def start_program(input: ProgramInput, background_tasks: BackgroundTasks) -> Dict:
-    """Start a new process"""
-    # Generate process ID
-    process_id = int(time.time() * 1000)
-    # Create process info
-    process_info = ProcessInfo(
-        pid=0,
-        start_time=datetime.now(),
-        state=ProcessState.READY,
-        program=input.program,
-        input=input.input,
-        name=input.name,
-        options=input.options
+@app.post("/prover9")
+async def start_prover9(request: ProgramRunRequestV2) -> RunAccepted:
+    """Start a Prover9 run with persisted or stream delivery."""
+    return await delivery_manager.create_run(ProgramType.PROVER9, request)
+
+
+@app.post("/mace4")
+async def start_mace4(request: ProgramRunRequestV2) -> RunAccepted:
+    """Start a Mace4 run with persisted or stream delivery."""
+    return await delivery_manager.create_run(ProgramType.MACE4, request)
+
+
+@app.post("/prooftrans")
+async def start_prooftrans(request: ProgramRunRequestV2) -> RunAccepted:
+    """Start a Prooftrans run with persisted or stream delivery."""
+    return await delivery_manager.create_run(ProgramType.PROOFTRANS, request)
+
+
+@app.post("/interpformat")
+async def start_interpformat(request: ProgramRunRequestV2) -> RunAccepted:
+    """Start an Interpformat run with persisted or stream delivery."""
+    return await delivery_manager.create_run(ProgramType.INTERPFORMAT, request)
+
+
+@app.post("/isofilter")
+async def start_isofilter(request: ProgramRunRequestV2) -> RunAccepted:
+    """Start an Isofilter run with persisted or stream delivery."""
+    return await delivery_manager.create_run(ProgramType.ISOFILTER, request)
+
+
+@app.get("/runs")
+async def list_runs() -> List[RunSummary]:
+    """List persisted runs."""
+    return delivery_manager.list_runs()
+
+
+@app.get("/runs/{run_id}/status")
+async def get_run_status(run_id: str) -> RunSummary:
+    """Get lifecycle status for a run."""
+    return delivery_manager.get_summary(run_id)
+
+
+@app.get("/runs/{run_id}/artifacts")
+async def get_run_artifacts(run_id: str) -> RunArtifacts:
+    """Return all persisted artifacts for a run."""
+    run = delivery_manager.get_run(run_id)
+    if run.delivery_mode.value != "persisted":
+        raise HTTPException(status_code=400, detail="artifacts are available only for persisted runs")
+    return RunArtifacts(run_id=run_id, artifacts=run.artifacts)
+
+
+@app.get("/runs/{run_id}/artifacts/{artifact}")
+async def get_run_artifact(run_id: str, artifact: str):
+    """Return a single persisted artifact by stable key."""
+    return {"run_id": run_id, "artifact": artifact, "content": delivery_manager.get_artifact(run_id, artifact)}
+
+
+@app.get("/runs/{run_id}/download/{artifact}")
+async def download_run_artifact(run_id: str, artifact: str) -> PlainTextResponse:
+    """Download artifact as plain text."""
+    payload = delivery_manager.get_artifact(run_id, artifact)
+    if isinstance(payload, str):
+        text = payload
+    else:
+        import json
+        text = json.dumps(payload, indent=2)
+    return PlainTextResponse(
+        text,
+        headers={"Content-Disposition": f'attachment; filename="{run_id}_{artifact}.txt"'},
     )
 
-    # Add to tracking
-    with process_lock:
-        processes[str(process_id)] = process_info
 
-    # Start process in background
-    background_tasks.add_task(run_program, input.program, input.input, process_id, input.options)
-
-    return {"process_id": process_id}
-
-@app.get("/status/{process_id}")
-async def get_status(process_id: int) -> ProcessInfo:
-    """Get the status of a process"""
-    if str(process_id) not in processes:
-        raise HTTPException(status_code=404, detail="Process not found")
-    return processes[str(process_id)]
-
-@app.get("/processes")
-async def list_processes() -> List[int]:
-    """List all tracked processes"""
-    return [int(process_id) for process_id in processes]
-
-@app.post("/kill/{process_id}")
-async def kill_process(process_id: int) -> Dict:
-    """Kill a running process"""
-    if str(process_id) not in processes:
-        raise HTTPException(status_code=404, detail="Process not found")
-    
-    success = kill_process_handler(process_id)
-    if not success:
-        raise HTTPException(status_code=400, detail="Process is not running or suspended")
-    
-    return {"status": "success", "message": f"Process {process_id} killed"}
-
-@app.get('/download/{process_id}')
-async def download_process(process_id: int) -> StreamingResponse:
-    """Download the output of a process"""
-    with process_lock:
-        if str(process_id) not in processes:
-            raise HTTPException(status_code=404, detail="Process not found")
-            
-        process_info = processes[str(process_id)]
-        if not process_info.fout_path:
-            raise HTTPException(status_code=404, detail="Process output file not found")
-        
-        # get the extension of the file
-        if process_info.program == ProgramType.PROVER9:
-            extension = 'proof'
-        elif process_info.program == ProgramType.MACE4:
-            extension = 'out'
-        elif process_info.program == ProgramType.ISOFILTER:
-            extension = 'model'
-        elif process_info.program == ProgramType.INTERPFORMAT:
-            extension = 'model'
-        elif process_info.program == ProgramType.PROOFTRANS:
-            extension = 'proof'
-        else:
-            extension = 'txt'
-
-        return StreamingResponse(
-            open(process_info.fout_path, 'rb'), 
-            media_type='text/plain',
-            headers={
-                'Content-Disposition': f'attachment; filename=output_{process_id}.{extension}'
-            })
+@app.delete("/runs/{run_id}")
+async def delete_run(run_id: str) -> Dict[str, str]:
+    """Delete run and associated in-memory state."""
+    return delivery_manager.delete_run(run_id)
 
 
-@app.get("/output/{process_id}")
-async def get_process_output(process_id: int, page: Optional[int] = None, page_size: Optional[int] = None) -> ProcessOutput:
-    """Get the output of a process with optional pagination"""
-    with process_lock:
-        if str(process_id) not in processes:
-            raise HTTPException(status_code=404, detail="Process not found")
-        
-        process_info = processes[str(process_id)]
-        if not process_info.fout_path:
-            raise HTTPException(status_code=404, detail="Process output file not found")
-        
-        # Get total number of lines
-        with open(process_info.fout_path, 'rb') as f:
-            total_lines = sum(1 for _ in f)
-        
-        # If no pagination parameters are provided, stream the entire output
-        if page is None or page_size is None:
-            with open(process_info.fout_path, 'rb') as f:
-                output = f.read().decode('utf-8', errors='replace')
-            return ProcessOutput(
-                output=output,
-                total_lines=total_lines,
-                page=1,
-                page_size=total_lines,
-                has_more=False
-            )
-        
-        # Calculate pagination
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        has_more = end_idx < total_lines
-        
-        # Get the requested page of lines
-        lines = []
-        with open(process_info.fout_path, 'rb') as f:
-            for i, line in enumerate(f):
-                if i >= start_idx and i < end_idx:
-                    lines.append(line.decode('utf-8', errors='replace').rstrip('\n'))
-                elif i >= end_idx:
-                    break
-        
-        page_output = "\n".join(lines)
-        
-        return ProcessOutput(
-            output=page_output,
-            total_lines=total_lines,
-            page=page,
-            page_size=page_size,
-            has_more=has_more
-        )
+@app.post("/runs/{run_id}/cancel")
+async def cancel_run(run_id: str) -> Dict[str, str]:
+    """Cancel an active run."""
+    return delivery_manager.cancel_run(run_id)
 
-@app.delete("/process/{process_id}")
-async def remove_process(process_id: int) -> Dict:
-    """Remove a completed process from the list"""
-    success = remove_process_handler(process_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Process not found")
-    return {"status": "success", "message": f"Process {process_id} removed"}
 
-@app.post("/pause/{process_id}")
-async def pause_process(process_id: int) -> Dict:
-    """Pause a running process"""
-    with process_lock:
-        if str(process_id) not in processes:
-            raise HTTPException(status_code=404, detail="Process not found")
-        
-        process_info = processes[str(process_id)]
-        if process_info.state != ProcessState.RUNNING:
-            raise HTTPException(status_code=400, detail="Process is not running")
-        # windows cannot pause a process
-        if os.name == 'nt':
-            raise HTTPException(status_code=400, detail="Windows cannot pause a process")
-        # Update state and send signal
-        processes[str(process_id)].state = ProcessState.SUSPENDED
-        os.kill(process_info.pid, signal.SIGSTOP)
-        return {"status": "success", "message": "Process paused"}
-
-@app.post("/resume/{process_id}")
-async def resume_process(process_id: int) -> Dict:
-    """Resume a paused process"""
-    with process_lock:
-        if str(process_id) not in processes:
-            raise HTTPException(status_code=404, detail="Process not found")
-        
-        process_info = processes[str(process_id)]
-        if process_info.state != ProcessState.SUSPENDED:
-            raise HTTPException(status_code=400, detail="Process is not paused")
-        # windows cannot resume a process
-        if os.name == 'nt':
-            raise HTTPException(status_code=400, detail="Windows cannot resume a process")
-        # Update state and send signal
-        processes[str(process_id)].state = ProcessState.RUNNING
-        os.kill(process_info.pid, signal.SIGCONT)
-        return {"status": "success", "message": "Process resumed"}
+@app.get("/runs/{run_id}/stream")
+async def stream_run(run_id: str) -> StreamingResponse:
+    """Subscribe to lifecycle/output events for one run via SSE."""
+    return StreamingResponse(
+        delivery_manager.stream_events(run_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
 
 @app.post("/parse")
 def parse(input: ParseInput) -> ParseOutput:

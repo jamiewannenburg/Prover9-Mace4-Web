@@ -376,3 +376,81 @@ class GuiOutput(BaseModel):
     mace4_options: Mace4Options
     language_options: str
     additional_input: str
+
+
+class DeliveryMode(str, Enum):
+    PERSISTED = "persisted"
+    STREAM = "stream"
+
+
+class InputKind(str, Enum):
+    TEXT = "text"
+    FILE = "file"
+    PROCESS_OUTPUT = "process_output"
+
+
+class TextInputSource(BaseModel):
+    kind: Literal[InputKind.TEXT]
+    text: str
+
+
+class FileInputSource(BaseModel):
+    kind: Literal[InputKind.FILE]
+    file_ref: str
+
+
+class ProcessOutputInputSource(BaseModel):
+    kind: Literal[InputKind.PROCESS_OUTPUT]
+    run_id: str
+    artifact: str
+
+
+InputSource = Union[TextInputSource, FileInputSource, ProcessOutputInputSource]
+
+
+class ProgramRunRequestV2(BaseModel):
+    input: InputSource
+    name: Optional[str] = None
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None
+    delivery_mode: DeliveryMode = DeliveryMode.PERSISTED
+
+
+class RunAccepted(BaseModel):
+    run_id: str
+    program: ProgramType
+    delivery_mode: DeliveryMode
+    lifecycle: str
+    created_at: datetime
+    stream_url: Optional[str] = None
+
+
+class RunSummary(BaseModel):
+    run_id: str
+    name: Optional[str] = None
+    program: ProgramType
+    delivery_mode: DeliveryMode
+    lifecycle: str
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    source_run_id: Optional[str] = None
+    source_artifact: Optional[str] = None
+    error: Optional[str] = None
+
+
+class RunArtifact(BaseModel):
+    artifact: str
+    content: Union[str, Dict, List]
+
+
+class RunArtifacts(BaseModel):
+    run_id: str
+    artifacts: Dict[str, Union[str, Dict, List]]
+
+
+class StreamEvent(BaseModel):
+    event: str
+    run_id: str
+    program: ProgramType
+    lifecycle: Optional[str] = None
+    data: Optional[Union[str, Dict, List]] = None
+    ts: datetime = Field(default_factory=datetime.utcnow)
