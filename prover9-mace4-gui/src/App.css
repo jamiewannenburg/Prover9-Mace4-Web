@@ -97,3 +97,15 @@
 .process-list table tbody tr:hover {
   background-color: rgba(0, 0, 0, 0.075);
 }
+
+.stream-run-output .stream-run-pre {
+  max-height: min(50vh, 420px);
+  overflow: auto;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 0.25rem;
+  padding: 0.5rem 0.75rem;
+}

@@ -1,14 +1,31 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useRef, useCallback } from 'react';
 import { Card, Button, ButtonGroup, Form } from 'react-bootstrap';
 import {
   INTERP_FORMATS,
   ProoftransOption,
   PROOFTRANS_OPTIONS,
-  RunArtifactPayload,
   RunSummary,
   ProgramType,
 } from '../types';
+import {
+  downloadArtifact,
+  getArtifact,
+  getRunArtifacts,
+  launchInterpformat,
+  launchIsofilter,
+  launchProoftrans,
+} from '../api/runs';
 import { formatDuration } from '../utils';
+
+/** Keys passed to `map_prooftrans_options` in pyp9m4_runner (no `parents_only` in that mapper). */
+function buildProoftransOptions(opt: ProoftransOption): Record<string, string | boolean> {
+  const format = (opt.format ?? '').trim() === '' ? 'default' : opt.format;
+  const o: Record<string, string | boolean> = { format };
+  if (opt.expand) o.expand = true;
+  if (opt.renumber) o.renumber = true;
+  if (opt.striplabels) o.striplabels = true;
+  return o;
+}
 
 interface ProcessDetailsProps {
   runId: string | null;
@@ -30,6 +47,8 @@ function artifactContentToString(content: unknown): string {
 
 const ProcessDetails: React.FC<ProcessDetailsProps> = ({ runId, runs, apiUrl, refreshRuns }) => {
   const [output, setOutput] = useState<string>('');
+  const [artifactKeys, setArtifactKeys] = useState<string[]>([]);
+  const [selectedArtifact, setSelectedArtifact] = useState<string>('stdout');
   const [selectedFormat, setSelectedFormat] = useState<string>('standard');
   const [prooftransOption, setProoftransOption] = useState<ProoftransOption>(PROOFTRANS_OPTIONS[0]);
   const [isofilterOptions, setIsofilterOptions] = useState({
@@ -38,169 +57,155 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ runId, runs, apiUrl, re
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const outputRef = useRef<HTMLPreElement>(null);
-  const prevRunIdRef = useRef<string | null>(null);
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const selectedRun = runs.find((r) => r.run_id === runId);
+
+  const refreshArtifactKeys = useCallback(async () => {
+    if (!runId) return;
+    try {
+      const { artifacts } = await getRunArtifacts(apiUrl, runId);
+      const keys = Object.keys(artifacts).sort((a, b) => {
+        const order = (k: string) => (k === 'stdout' ? 0 : k === 'stderr' ? 1 : 2);
+        return order(a) - order(b) || a.localeCompare(b);
+      });
+      setArtifactKeys(keys);
+      setSelectedArtifact((prev) => {
+        if (keys.includes(prev)) return prev;
+        if (keys.includes('stdout')) return 'stdout';
+        return keys[0] ?? 'stdout';
+      });
+    } catch {
+      setArtifactKeys([]);
+    }
+  }, [apiUrl, runId]);
   
   const fetchOutput = useCallback(async () => {
     if (!runId) return;
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${apiUrl}/runs/${encodeURIComponent(runId)}/artifacts/stdout`);
-      if (response.ok) {
-        const data: RunArtifactPayload = await response.json();
-        setOutput(artifactContentToString(data.content));
-      } else {
-        setOutput('No output available (artifact may not exist yet for this run).');
-      }
+      const data = await getArtifact(apiUrl, runId, selectedArtifact);
+      setOutput(artifactContentToString(data.content));
     } catch (error) {
       console.error('Error fetching output:', error);
-      setOutput('Error fetching output');
+      setOutput(
+        `No output available for artifact "${selectedArtifact}" (it may not exist yet for this run).`
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [apiUrl, runId]);
+  }, [apiUrl, runId, selectedArtifact]);
+
+  useLayoutEffect(() => {
+    setSelectedArtifact('stdout');
+  }, [runId]);
 
   useEffect(() => {
-    const cleanup = () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-    };
-
-    if (!runId || !selectedRun) {
-      cleanup();
-      setOutput('');
-      prevRunIdRef.current = null;
+    if (!runId) {
+      setArtifactKeys([]);
       return;
     }
+    void refreshArtifactKeys();
+  }, [runId, refreshArtifactKeys]);
 
-    if (selectedRun.lifecycle === 'running') {
-      cleanup();
-      pollIntervalRef.current = setInterval(() => {
-        void fetchOutput();
-      }, 1000);
-    } else {
-      cleanup();
+  useEffect(() => {
+    if (!runId || !selectedRun) {
+      setOutput('');
+      return;
     }
+    void fetchOutput();
+  }, [runId, selectedArtifact, selectedRun?.run_id, fetchOutput]);
 
-    if (runId !== prevRunIdRef.current) {
+  useEffect(() => {
+    if (!runId || !selectedRun || selectedRun.lifecycle !== 'running') {
+      return;
+    }
+    const t = window.setInterval(() => {
+      void refreshArtifactKeys();
       void fetchOutput();
-      prevRunIdRef.current = runId;
-    }
-
-    return cleanup;
-  }, [runId, selectedRun, fetchOutput]);
+    }, 1000);
+    return () => window.clearInterval(t);
+  }, [runId, selectedRun?.lifecycle, refreshArtifactKeys, fetchOutput]);
   
   const downloadOutput = async () => {
     if (!runId) return;
-    
+
     try {
-      const url = `${apiUrl}/runs/${encodeURIComponent(runId)}/download/stdout`;
+      const blob = await downloadArtifact(apiUrl, runId, selectedArtifact);
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.target = '_blank';
-      a.download = `output_${runId}_${selectedRun?.program ?? 'run'}.txt`;
+      a.download = `${runId}_${selectedArtifact}.txt`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading output:', error);
-      alert('Error downloading output');
+      alert(error instanceof Error ? error.message : 'Error downloading output');
     }
   };
-  
+
   const formatProver9Output = async () => {
     if (!runId) return;
-    
-    try {
-      const options: Record<string, string | boolean> = {
-        format: prooftransOption.format || 'default',
-      };
-      if (prooftransOption.parents_only) options.parents_only = true;
-      if (prooftransOption.expand) options.expand = true;
-      if (prooftransOption.renumber) options.renumber = true;
-      if (prooftransOption.striplabels) options.striplabels = true;
 
-      const response = await fetch(`${apiUrl}/prooftrans`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+    try {
+      await launchProoftrans(apiUrl, {
+        input: {
+          kind: 'process_output',
+          run_id: runId,
+          artifact: selectedArtifact,
         },
-        body: JSON.stringify({
-          input: { kind: 'process_output', run_id: runId, artifact: 'stdout' },
-          options,
-          delivery_mode: 'persisted',
-        }),
+        options: buildProoftransOptions(prooftransOption),
+        delivery_mode: 'persisted',
       });
-      
-      if (response.ok) {
-        void refreshRuns?.();
-      } else {
-        alert('Failed to format output');
-      }
+      void refreshRuns?.();
     } catch (error) {
       console.error('Error formatting output:', error);
-      alert('Error formatting output');
+      alert(error instanceof Error ? error.message : 'Error formatting output');
     }
   };
-  
+
   const formatMace4Output = async () => {
     if (!runId) return;
-    
+
     try {
-      const response = await fetch(`${apiUrl}/interpformat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      await launchInterpformat(apiUrl, {
+        input: {
+          kind: 'process_output',
+          run_id: runId,
+          artifact: selectedArtifact,
         },
-        body: JSON.stringify({
-          input: { kind: 'process_output', run_id: runId, artifact: 'stdout' },
-          options: { format: selectedFormat },
-          delivery_mode: 'persisted',
-        }),
+        options: { format: selectedFormat },
+        delivery_mode: 'persisted',
       });
-      
-      if (response.ok) {
-        void refreshRuns?.();
-      } else {
-        const data = await response.json().catch(() => ({}));
-        console.error('Failed to format output:', data);
-        alert('Failed to format output');
-      }
+      void refreshRuns?.();
     } catch (error) {
       console.error('Error formatting output:', error);
-      alert('Error formatting output');
+      alert(error instanceof Error ? error.message : 'Error formatting output');
     }
   };
 
   const filterModels = async () => {
     if (!runId) return;
-    
+
     try {
-      const response = await fetch(`${apiUrl}/isofilter`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      await launchIsofilter(apiUrl, {
+        input: {
+          kind: 'process_output',
+          run_id: runId,
+          artifact: selectedArtifact,
         },
-        body: JSON.stringify({
-          input: { kind: 'process_output', run_id: runId, artifact: 'stdout' },
-          options: isofilterOptions,
-          delivery_mode: 'persisted',
-        }),
+        options: {
+          wrap: isofilterOptions.wrap,
+          ignore_constants: isofilterOptions.ignore_constants,
+        },
+        delivery_mode: 'persisted',
       });
-      
-      if (response.ok) {
-        void refreshRuns?.();
-      } else {
-        alert('Failed to filter models');
-      }
+      void refreshRuns?.();
     } catch (error) {
       console.error('Error filtering models:', error);
-      alert('Error filtering models');
+      alert(error instanceof Error ? error.message : 'Error filtering models');
     }
   };
 
@@ -234,6 +239,11 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ runId, runs, apiUrl, re
     return info.join('\n');
   };
 
+  const keysForSelect = artifactKeys.length > 0 ? artifactKeys : ['stdout'];
+  const artifactSelectValue = keysForSelect.includes(selectedArtifact)
+    ? selectedArtifact
+    : keysForSelect[0];
+
   return (
     <Card>
       <Card.Body>
@@ -241,6 +251,22 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ runId, runs, apiUrl, re
         <pre className="process-info">{formatRunInfo(selectedRun)}</pre>
         
         <hr />
+        <div className="mb-3 d-flex align-items-center gap-2 flex-wrap">
+          <Form.Label className="mb-0 small text-muted">Artifact</Form.Label>
+          <Form.Select
+            size="sm"
+            style={{ maxWidth: 240 }}
+            value={artifactSelectValue}
+            onChange={(e) => setSelectedArtifact(e.target.value)}
+            aria-label="Select output artifact"
+          >
+            {keysForSelect.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </Form.Select>
+        </div>
         {selectedRun.program === ProgramType.PROVER9 && (
           <div className="mb-3">
             <ButtonGroup>
@@ -263,15 +289,6 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ runId, runs, apiUrl, re
             <ButtonGroup>
               <>
                 <div className="ms-2 d-inline-block">
-                  {prooftransOption.parents_only !== undefined && (
-                    <Form.Check
-                      type="checkbox"
-                      label="Parents Only"
-                      checked={!!prooftransOption.parents_only}
-                      onChange={() => setProoftransOption({ ...prooftransOption, parents_only: !prooftransOption.parents_only })}
-                      className="d-inline-block me-2"
-                    />
-                  )}
                   {prooftransOption.expand !== undefined && (
                     <Form.Check
                       type="checkbox"
@@ -368,8 +385,7 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ runId, runs, apiUrl, re
             className="output-text p-2 border bg-light" 
             style={{ maxHeight: '500px', overflow: 'auto', whiteSpace: 'pre-wrap' }}
           >
-            {output || 'No output available'}
-            {isLoading && selectedRun.lifecycle !== 'running' && <div className="text-center">Loading...</div>}
+            {isLoading ? 'Loading…' : output || 'No output available'}
           </pre>
         </div>
       </Card.Body>

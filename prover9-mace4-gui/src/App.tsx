@@ -7,6 +7,7 @@ import Prover9OptionsPanel from './components/Prover9OptionsPanel';
 import Mace4OptionsPanel from './components/Mace4OptionsPanel';
 import AdditionalInputPanel from './components/AdditionalInputPanel';
 import RunPanel from './components/RunPanel';
+import StreamRunOutput from './components/StreamRunOutput';
 import ProcessList from './components/ProcessList';
 import ProcessDetails from './components/ProcessDetails';
 import ApiConfig from './components/ApiConfig';
@@ -43,6 +44,7 @@ function App() {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [activeStreamRuns, setActiveStreamRuns] = useState<ActiveStreamRun[]>([]);
+  const [streamBannerDismissed, setStreamBannerDismissed] = useState(false);
   const [apiConfigured, setApiConfigured] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +58,12 @@ function App() {
     const ids = new Set(runs.map((r) => r.run_id));
     setActiveStreamRuns((prev) => prev.filter((a) => !ids.has(a.runId)));
   }, [runs]);
+
+  useEffect(() => {
+    if (activeStreamRuns.length === 0) {
+      setStreamBannerDismissed(false);
+    }
+  }, [activeStreamRuns.length]);
 
   // Handle page refresh
   useEffect(() => {
@@ -147,12 +155,17 @@ function App() {
   };
 
   const handleStreamRunStarted = useCallback((run: ActiveStreamRun) => {
+    setStreamBannerDismissed(false);
     setActiveStreamRuns((prev) => {
       if (prev.some((r) => r.runId === run.runId)) {
         return prev;
       }
       return [...prev, run];
     });
+  }, []);
+
+  const removeStreamRun = useCallback((runId: string) => {
+    setActiveStreamRuns((prev) => prev.filter((r) => r.runId !== runId));
   }, []);
 
   if (!apiConfigured) {
@@ -174,10 +187,32 @@ function App() {
                 
                 {error && <Alert variant="danger" onClose={() => setError(null)} dismissible>{error}</Alert>}
 
-                {activeStreamRuns.length > 0 && (
-                  <Alert variant="info" className="mb-3" dismissible onClose={() => setActiveStreamRuns([])}>
-                    {activeStreamRuns.length} stream-only run(s) are shown in the list until they finish and appear in server history.
+                {activeStreamRuns.length > 0 && !streamBannerDismissed && (
+                  <Alert
+                    variant="info"
+                    className="mb-3"
+                    dismissible
+                    onClose={() => setStreamBannerDismissed(true)}
+                  >
+                    Stream delivery runs are tracked here until finished; they are not listed in{' '}
+                    <code>GET /runs</code> until persisted. Live output appears in the panels below.
                   </Alert>
+                )}
+
+                {activeStreamRuns.length > 0 && (
+                  <div className="mb-3">
+                    {activeStreamRuns.map((r) => (
+                      <StreamRunOutput
+                        key={r.runId}
+                        apiUrl={apiUrl}
+                        runId={r.runId}
+                        streamUrl={r.streamUrl}
+                        program={r.program}
+                        onRemove={() => removeStreamRun(r.runId)}
+                        onFinished={refreshRuns}
+                      />
+                    ))}
+                  </div>
                 )}
                 
                 <Row className="mb-3">

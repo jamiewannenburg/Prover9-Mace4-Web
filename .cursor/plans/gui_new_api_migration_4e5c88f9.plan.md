@@ -16,10 +16,10 @@ todos:
     status: completed
   - id: process-details
     content: "ProcessDetails: artifacts + download; chain via process_output; fix prooftrans/interpformat/isofilter payloads"
-    status: pending
+    status: completed
   - id: stream-sse
     content: "Optional: delivery_mode stream + EventSource UI for stream_url"
-    status: pending
+    status: completed
   - id: tests
     content: Update App.test.tsx / smoke tests for new endpoints
     status: pending
