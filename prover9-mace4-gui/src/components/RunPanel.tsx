@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Button, ButtonGroup, Alert, Row, Col, Modal, Form } from 'react-bootstrap';
-import { SampleNode, SampleTreeProps, Mace4Options, Prover9Options, ParseOutput, Flag, IntegerParameter, GuiOutput, INTERP_FORMATS, InterpFormat } from '../types';
+import { ActiveStreamRun, SampleNode, SampleTreeProps, Mace4Options, Prover9Options, ParseOutput, GuiOutput } from '../types';
 import { useFormulas } from '../context/FormulaContext';
 import { useMace4Options } from '../context/Mace4OptionsContext';
 import { useProver9Options } from '../context/Prover9OptionsContext';
@@ -75,9 +75,13 @@ const SampleTree: React.FC<SampleTreeProps> = ({ nodes, onSelectFile, level = 0 
 
 interface RunPanelProps {
   apiUrl: string;
+  /** Called after a run is accepted so the run list can refresh (persisted mode). */
+  refreshRuns?: () => void | Promise<void>;
+  /** When starting a stream-mode run, register it so the UI can track runs not listed by `GET /runs`. */
+  onStreamRunStarted?: (run: ActiveStreamRun) => void;
 }
 
-const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
+const RunPanel: React.FC<RunPanelProps> = ({ apiUrl, refreshRuns, onStreamRunStarted }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [processName, setProcessName] = useState<string>('');
@@ -152,7 +156,7 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
       });
 
       if (response.ok) {
-        // Process started successfully
+        void refreshRuns?.();
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to start Prover9');
@@ -189,7 +193,7 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl }) => {
       });
 
       if (response.ok) {
-        // Process started successfully
+        void refreshRuns?.();
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to start Mace4');

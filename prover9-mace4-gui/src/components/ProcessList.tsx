@@ -1,111 +1,76 @@
 import React from 'react';
 import { Table, Button, ButtonGroup, Badge } from 'react-bootstrap';
-import { Process, ProcessState } from '../types';
+import { RunSummary } from '../types';
 import { formatDuration } from '../utils';
 
 interface ProcessListProps {
-  processes: Process[];
-  selectedProcess: number | null;
-  onSelectProcess: (id: number | null) => void;
+  runs: RunSummary[];
+  selectedRunId: string | null;
+  onSelectRun: (runId: string | null) => void;
   apiUrl: string;
-  refreshProcesses: () => void;
+  refreshRuns: () => void | Promise<void>;
 }
 
 const ProcessList: React.FC<ProcessListProps> = ({ 
-  processes, 
-  selectedProcess, 
-  onSelectProcess, 
+  runs, 
+  selectedRunId, 
+  onSelectRun, 
   apiUrl,
-  refreshProcesses
+  refreshRuns
 }) => {
   
-  const killProcess = async (id: number) => {
+  const cancelRun = async (runId: string) => {
     try {
-      const response = await fetch(`${apiUrl}/kill/${id}`, {
+      const response = await fetch(`${apiUrl}/runs/${encodeURIComponent(runId)}/cancel`, {
         method: 'POST',
       });
       
       if (response.ok) {
-        refreshProcesses();
+        void refreshRuns();
       } else {
-        alert('Failed to kill process');
+        alert('Failed to cancel run');
       }
     } catch (error) {
-      console.error('Error killing process:', error);
-      alert('Error killing process');
+      console.error('Error cancelling run:', error);
+      alert('Error cancelling run');
     }
   };
   
-  const pauseProcess = async (id: number) => {
+  const removeRun = async (runId: string) => {
     try {
-      const response = await fetch(`${apiUrl}/pause/${id}`, {
-        method: 'POST',
-      });
-      
-      if (response.ok) {
-        refreshProcesses();
-      } else {
-        alert('Failed to pause process');
-      }
-    } catch (error) {
-      console.error('Error pausing process:', error);
-      alert('Error pausing process');
-    }
-  };
-  
-  const resumeProcess = async (id: number) => {
-    try {
-      const response = await fetch(`${apiUrl}/resume/${id}`, {
-        method: 'POST',
-      });
-      
-      if (response.ok) {
-        refreshProcesses();
-      } else {
-        alert('Failed to resume process');
-      }
-    } catch (error) {
-      console.error('Error resuming process:', error);
-      alert('Error resuming process');
-    }
-  };
-  
-  const removeProcess = async (id: number) => {
-    try {
-      // this should call delete event to process/id
-      const response = await fetch(`${apiUrl}/process/${id}`, {
+      const response = await fetch(`${apiUrl}/runs/${encodeURIComponent(runId)}`, {
         method: 'DELETE',
       });
-      console.log(response);
-      const msg = await response.json();
-      console.log(apiUrl,msg)
       if (response.ok) {
-        if (selectedProcess === id) {
-          onSelectProcess(null);
+        if (selectedRunId === runId) {
+          onSelectRun(null);
         }
-        refreshProcesses();
+        void refreshRuns();
       } else {
-        console.log(msg);
-        alert('Failed to remove process');
+        const msg = await response.json().catch(() => ({}));
+        console.error(apiUrl, msg);
+        alert('Failed to remove run');
       }
     } catch (error) {
-      console.error('Error removing process:', error);
-      alert('Error removing process');
+      console.error('Error removing run:', error);
+      alert('Error removing run');
     }
   };
 
-  const getStatusBadge = (state: string) => {
-    switch (state) {
+  const getStatusBadge = (lifecycle: string) => {
+    switch (lifecycle) {
       case 'running':
         return <Badge key="running" bg="success">Running</Badge>;
       case 'completed':
         return <Badge key="completed" bg="primary">Completed</Badge>;
       case 'failed':
         return <Badge key="failed" bg="danger">Failed</Badge>;
-      case 'paused':
-        return <Badge key="paused" bg="warning">Paused</Badge>;
+      case 'cancelled':
+        return <Badge key="cancelled" bg="warning">Cancelled</Badge>;
+      case 'queued':
+        return <Badge key="queued" bg="info">Queued</Badge>;
       default:
-        return <Badge key={state} bg="secondary">{state}</Badge>;
+        return <Badge key={lifecycle} bg="secondary">{lifecycle}</Badge>;
     }
   };
 
@@ -116,77 +81,64 @@ const ProcessList: React.FC<ProcessListProps> = ({
     return formatDuration(durationMs / 1000);
   };
 
+  const shortId = (id: string) => (id.length > 12 ? `${id.slice(0, 8)}…` : id);
+
   return (
     <div className="process-list">
       <h3>Process List</h3>
       <Table striped bordered hover>
         <thead>
           <tr>
-            <th>ID</th>
+            <th>Run ID</th>
             <th>Name</th>
             <th>Program</th>
+            <th>Delivery</th>
             <th>Status</th>
             <th>Duration</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {processes.length === 0 ? (
+          {runs.length === 0 ? (
             <tr key="processempty-state">
-              <td colSpan={6} className="text-center">No processes running</td>
+              <td colSpan={7} className="text-center">No runs</td>
             </tr>
           ) : (
-            processes.map(process => {
+            runs.map(run => {
               return (
                 <tr 
-                  key={`process-${process.id}`} 
-                  className={selectedProcess === process.id ? 'table-active' : ''}
-                  onClick={() => {
-                    if (typeof process.id === 'number') {
-                      onSelectProcess(process.id);
-                    } else {
-                      console.error('Invalid process ID:', process.id);
-                    }
-                  }}
+                  key={`run-${run.run_id}`} 
+                  className={selectedRunId === run.run_id ? 'table-active' : ''}
+                  onClick={() => onSelectRun(run.run_id)}
                 >
-                  <td>{process.id}</td>
-                  <td>{process.name || 'Unnamed'}</td>
-                  <td>{process.program}</td>
-                  <td>{getStatusBadge(process.state)}</td>
-                  <td>{calculateDuration(process.start_time)}</td>
+                  <td title={run.run_id}>{shortId(run.run_id)}</td>
+                  <td>{run.name || 'Unnamed'}</td>
+                  <td>{run.program}</td>
+                  <td>{run.delivery_mode}</td>
+                  <td>
+                    {getStatusBadge(run.lifecycle)}
+                    {run.source_run_id && (
+                      <span className="text-muted small ms-1" title={run.source_run_id}>
+                        (from {shortId(run.source_run_id)})
+                      </span>
+                    )}
+                  </td>
+                  <td>{calculateDuration(run.created_at)}</td>
                   <td>
                     <ButtonGroup size="sm">
-                      {process.state === ProcessState.RUNNING && (
+                      {run.lifecycle === 'running' && (
                         <Button 
-                          key="pause"
-                          variant="warning" 
-                          onClick={(e) => { e.stopPropagation(); pauseProcess(process.id); }}
-                        >
-                          Pause
-                        </Button>
-                      )}
-                      {process.state === ProcessState.SUSPENDED && (
-                        <Button 
-                          key="resume"
-                          variant="success" 
-                          onClick={(e) => { e.stopPropagation(); resumeProcess(process.id); }}
-                        >
-                          Resume
-                        </Button>
-                      )}
-                      {process.state === ProcessState.RUNNING && (
-                        <Button 
-                          key="kill"
+                          key="cancel"
                           variant="danger" 
-                          onClick={(e) => { e.stopPropagation(); killProcess(process.id); }}
+                          onClick={(e) => { e.stopPropagation(); cancelRun(run.run_id); }}
                         >
-                          Kill
+                          Cancel
                         </Button>
                       )}
                       <Button 
                         key="remove"
                         variant="secondary" 
-                        onClick={(e) => { e.stopPropagation(); removeProcess(process.id); }}
+                        onClick={(e) => { e.stopPropagation(); removeRun(run.run_id); }}
                       >
                         Remove
                       </Button>
@@ -202,4 +154,4 @@ const ProcessList: React.FC<ProcessListProps> = ({
   );
 };
 
-export default ProcessList; 
+export default ProcessList;

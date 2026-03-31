@@ -359,6 +359,13 @@ export interface RunMutationResult {
   message: string;
 }
 
+/** Stream-mode run tracked client-side until it appears in `GET /runs` or is dismissed. */
+export interface ActiveStreamRun {
+  runId: string;
+  program: ProgramType;
+  streamUrl: string;
+}
+
 export interface ParseOutput {
   assumptions: string;
   goals: string;

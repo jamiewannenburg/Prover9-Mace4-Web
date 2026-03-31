@@ -7,7 +7,7 @@ todos:
     status: completed
   - id: app-list-state
     content: "Refactor App.tsx: GET /runs, selectedRunId string, refresh wiring, optional activeStreamRuns"
-    status: pending
+    status: completed
   - id: run-panel
     content: "RunPanel: POST /prover9|/mace4 with TextInputSource + options + delivery_mode; remove save_input; wire refresh"
     status: pending

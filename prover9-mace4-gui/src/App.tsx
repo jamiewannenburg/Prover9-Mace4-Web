@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import { Container, Row, Col, Tabs, Tab, Button, Alert } from 'react-bootstrap';
+import { Container, Row, Col, Tabs, Tab, Alert } from 'react-bootstrap';
 import FormulasPanel from './components/FormulasPanel';
 import LanguageOptionsPanel from './components/LanguageOptionsPanel';
 import Prover9OptionsPanel from './components/Prover9OptionsPanel';
@@ -10,7 +10,7 @@ import RunPanel from './components/RunPanel';
 import ProcessList from './components/ProcessList';
 import ProcessDetails from './components/ProcessDetails';
 import ApiConfig from './components/ApiConfig';
-import { Process } from './types';
+import { ActiveStreamRun, RunSummary } from './types';
 import { FormulaProvider } from './context/FormulaContext';
 import { Mace4OptionsProvider } from './context/Mace4OptionsContext';
 import { Prover9OptionsProvider } from './context/Prover9OptionsContext';
@@ -18,19 +18,44 @@ import { LanguageOptionsProvider } from './context/LanguageOptionsContext';
 import { AdditionalOptionsProvider } from './context/AdditionalOptionsContext';
 import './App.css';
 
-const PROGRAM_NAME = 'Prover9-Mace4';
-const PROGRAM_VERSION = '0.5 Web';
-const PROGRAM_DATE = 'May 2025';
-const BANNER = `${PROGRAM_NAME} Version ${PROGRAM_VERSION}, ${PROGRAM_DATE}`;
+function mergePersistedWithActiveStreams(
+  persisted: RunSummary[],
+  active: ActiveStreamRun[]
+): RunSummary[] {
+  const ids = new Set(persisted.map((r) => r.run_id));
+  const extras: RunSummary[] = active
+    .filter((a) => !ids.has(a.runId))
+    .map((a) => ({
+      run_id: a.runId,
+      program: a.program,
+      delivery_mode: 'stream',
+      lifecycle: 'running',
+      created_at: new Date().toISOString(),
+      name: null,
+    }));
+  return [...persisted, ...extras];
+}
 
 function App() {
   const [apiUrl, setApiUrl] = useState<string>(() => {
     return localStorage.getItem('prover9_api_url') || process.env.REACT_APP_API_URL ||'/api';
   });
-  const [processes, setProcesses] = useState<Process[]>([]);
-  const [selectedProcess, setSelectedProcess] = useState<number | null>(null);
+  const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [activeStreamRuns, setActiveStreamRuns] = useState<ActiveStreamRun[]>([]);
   const [apiConfigured, setApiConfigured] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  const displayRuns = useMemo(
+    () => mergePersistedWithActiveStreams(runs, activeStreamRuns),
+    [runs, activeStreamRuns]
+  );
+
+  // Drop client-only stream rows once the same run_id appears in persisted `GET /runs`.
+  useEffect(() => {
+    const ids = new Set(runs.map((r) => r.run_id));
+    setActiveStreamRuns((prev) => prev.filter((a) => !ids.has(a.runId)));
+  }, [runs]);
 
   // Handle page refresh
   useEffect(() => {
@@ -77,10 +102,10 @@ function App() {
     }
   }, []);
 
-  const updateProcessList = async () => {
-    const processUrl = `${apiUrl}/processes`
+  const refreshRuns = useCallback(async () => {
+    const listUrl = `${apiUrl}/runs`;
     try {
-      const response = await fetch(processUrl);
+      const response = await fetch(listUrl);
       if (!response.ok) {
         const errorText = await response.text();
         console.error('API Error:', {
@@ -88,57 +113,47 @@ function App() {
           statusText: response.statusText,
           body: errorText
         });
-        setError(`Failed to fetch processes: ${response.status} ${response.statusText}`);
+        setError(`Failed to fetch runs: ${response.status} ${response.statusText}`);
         return;
       }
-      
-      const processIds = await response.json();
-      if (!Array.isArray(processIds)) {
-        console.error('Invalid response format:', processIds);
+
+      const data = await response.json();
+      if (!Array.isArray(data)) {
+        console.error('Invalid response format:', data);
         setError('Invalid response format from API');
         return;
       }
 
-      // Fetch full details for each process
-      const processDetails = await Promise.all(
-        processIds.map(async (id) => {
-          const detailResponse = await fetch(`${apiUrl}/status/${id}`);
-          if (detailResponse.ok) {
-            const data = await detailResponse.json();
-            // Transform the data to match our Process interface
-            return {
-              ...data,
-              id: id  // Map the process ID to the id field
-            };
-          }
-          console.error(`Failed to fetch details for process ${id}`);
-          return null;
-        })
-      );
-
-      // Filter out any failed fetches and update state
-      const validProcesses = processDetails.filter((p): p is Process => p !== null);
-      setProcesses(validProcesses);
+      setRuns(data as RunSummary[]);
     } catch (err) {
       console.error('API Error:', {
-        url: processUrl,
+        url: listUrl,
         error: err instanceof Error ? err.message : String(err)
       });
       setError('API server not available');
     }
-  };
+  }, [apiUrl]);
 
   useEffect(() => {
     if (apiConfigured) {
-      updateProcessList();
-      const intervalId = setInterval(updateProcessList, 3000);
+      refreshRuns();
+      const intervalId = setInterval(refreshRuns, 3000);
       return () => clearInterval(intervalId);
     }
-  }, [apiConfigured, apiUrl]);
+  }, [apiConfigured, apiUrl, refreshRuns]);
 
-  const handleProcessSelection = (id: number | null) => {
-    setSelectedProcess(id);
+  const handleRunSelection = (runId: string | null) => {
+    setSelectedRunId(runId);
   };
+
+  const handleStreamRunStarted = useCallback((run: ActiveStreamRun) => {
+    setActiveStreamRuns((prev) => {
+      if (prev.some((r) => r.runId === run.runId)) {
+        return prev;
+      }
+      return [...prev, run];
+    });
+  }, []);
 
   if (!apiConfigured) {
     return <ApiConfig onSave={saveApiUrl} initialValue={apiUrl} />;
@@ -158,10 +173,20 @@ function App() {
                 </header> */}
                 
                 {error && <Alert variant="danger" onClose={() => setError(null)} dismissible>{error}</Alert>}
+
+                {activeStreamRuns.length > 0 && (
+                  <Alert variant="info" className="mb-3" dismissible onClose={() => setActiveStreamRuns([])}>
+                    {activeStreamRuns.length} stream-only run(s) are shown in the list until they finish and appear in server history.
+                  </Alert>
+                )}
                 
                 <Row className="mb-3">
                   <Col>
-                    <RunPanel apiUrl={apiUrl} />
+                    <RunPanel
+                      apiUrl={apiUrl}
+                      refreshRuns={refreshRuns}
+                      onStreamRunStarted={handleStreamRunStarted}
+                    />
                   </Col>
                 </Row>
                 
@@ -190,18 +215,19 @@ function App() {
                 <Row>
                   <Col md={8}>
                     <ProcessList 
-                      processes={processes} 
-                      selectedProcess={selectedProcess}
-                      onSelectProcess={handleProcessSelection}
+                      runs={displayRuns} 
+                      selectedRunId={selectedRunId}
+                      onSelectRun={handleRunSelection}
                       apiUrl={apiUrl}
-                      refreshProcesses={updateProcessList}
+                      refreshRuns={refreshRuns}
                     />
                   </Col>
                   <Col md={4}>
                     <ProcessDetails 
-                      processId={selectedProcess} 
-                      processes={processes}
+                      runId={selectedRunId} 
+                      runs={displayRuns}
                       apiUrl={apiUrl}
+                      refreshRuns={refreshRuns}
                     />
                   </Col>
                 </Row>
