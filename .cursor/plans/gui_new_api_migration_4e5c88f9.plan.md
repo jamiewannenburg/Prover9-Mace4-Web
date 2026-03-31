@@ -22,7 +22,7 @@ todos:
     status: completed
   - id: tests
     content: Update App.test.tsx / smoke tests for new endpoints
-    status: pending
+    status: completed
 isProject: false
 ---
 
