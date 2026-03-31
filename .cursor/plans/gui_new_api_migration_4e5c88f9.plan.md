@@ -10,7 +10,7 @@ todos:
     status: completed
   - id: run-panel
     content: "RunPanel: POST /prover9|/mace4 with TextInputSource + options + delivery_mode; remove save_input; wire refresh"
-    status: pending
+    status: completed
   - id: process-list
     content: "ProcessList: run_id rows, lifecycle badges, cancel/delete endpoints; remove pause/resume"
     status: pending

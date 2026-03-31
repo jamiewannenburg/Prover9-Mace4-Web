@@ -1,6 +1,18 @@
 import React, { useState, useRef } from 'react';
 import { Button, ButtonGroup, Alert, Row, Col, Modal, Form } from 'react-bootstrap';
-import { ActiveStreamRun, SampleNode, SampleTreeProps, Mace4Options, Prover9Options, ParseOutput, GuiOutput } from '../types';
+import {
+  ActiveStreamRun,
+  SampleNode,
+  SampleTreeProps,
+  Mace4Options,
+  Prover9Options,
+  ParseOutput,
+  GuiOutput,
+  DeliveryMode,
+  ProgramRunRequestV2,
+  RunAccepted,
+  ProgramType,
+} from '../types';
 import { useFormulas } from '../context/FormulaContext';
 import { useMace4Options } from '../context/Mace4OptionsContext';
 import { useProver9Options } from '../context/Prover9OptionsContext';
@@ -8,6 +20,30 @@ import { useLanguageOptions } from '../context/LanguageOptionsContext';
 import { useAdditionalOptions } from '../context/AdditionalOptionsContext';
 import { DEFAULT_OPTIONS as PROVER9_DEFAULT_OPTIONS } from './Prover9OptionsPanel';
 import { DEFAULT_OPTIONS as MACE4_DEFAULT_OPTIONS } from './Mace4OptionsPanel';
+
+/** Flat primitives for `ProgramRunRequestV2.options` (API accepts JSON scalars; runner uses `_extract_option_value`). */
+function prover9OptionsForApi(o: Prover9Options): Record<string, string | number | boolean> {
+  return {
+    max_seconds: o.max_seconds.value,
+  };
+}
+
+function mace4OptionsForApi(o: Mace4Options): Record<string, string | number | boolean> {
+  return {
+    start_size: o.start_size.value,
+    end_size: o.end_size.value,
+    increment: o.increment.value,
+    max_models: o.max_models.value,
+    max_seconds: o.max_seconds.value,
+    max_seconds_per: o.max_seconds_per.value,
+    max_megs: o.max_megs.value,
+    print_models: o.print_models.value,
+    print_models_tabular: o.print_models_tabular.value,
+    integer_ring: o.integer_ring.value,
+    verbose: o.verbose.value,
+    trace: o.trace.value,
+  };
+}
 
 const SampleTree: React.FC<SampleTreeProps> = ({ nodes, onSelectFile, level = 0 }) => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -85,6 +121,7 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl, refreshRuns, onStreamRunSta
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [processName, setProcessName] = useState<string>('');
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('persisted');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showSampleSelector, setShowSampleSelector] = useState(false);
   const [samples, setSamples] = useState<SampleNode[]>([]);
@@ -132,104 +169,87 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl, refreshRuns, onStreamRunSta
     }
   };
 
-  const runProver9 = async () => {
+  const launchProgram = async (program: ProgramType.PROVER9 | ProgramType.MACE4) => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      const input = await generateInput();
-      if (!input) {
+      const text = await generateInput();
+      if (!text) {
         setLoading(false);
         return;
       }
-      
-      const response = await fetch(`${apiUrl}/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          program: 'prover9',
-          input,
-          name: processName || `Prover9_${new Date().toISOString()}`
-        }),
-      });
 
-      if (response.ok) {
-        void refreshRuns?.();
-      } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to start Prover9');
-      }
-    } catch (error) {
-      setError('Error starting Prover9');
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      const mergedP9 = { ...PROVER9_DEFAULT_OPTIONS, ...prover9Options } as Prover9Options;
+      const mergedM4 = { ...MACE4_DEFAULT_OPTIONS, ...mace4Options } as Mace4Options;
+      const defaultName =
+        program === ProgramType.PROVER9
+          ? `Prover9_${new Date().toISOString()}`
+          : `Mace4_${new Date().toISOString()}`;
 
-  const runMace4 = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const input = await generateInput();
-      if (!input) {
-        setLoading(false);
-        return;
-      }
-      
-      const response = await fetch(`${apiUrl}/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          program: 'mace4',
-          input,
-          name: processName || `Mace4_${new Date().toISOString()}`
-        }),
-      });
-
-      if (response.ok) {
-        void refreshRuns?.();
-      } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to start Mace4');
-      }
-    } catch (error) {
-      setError('Error starting Mace4');
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const saveInput = async () => {
-    try {
-      const saveData = {
-        assumptions,
-        goals,
+      const body: ProgramRunRequestV2 = {
+        input: { kind: 'text', text },
+        name: processName || defaultName,
+        delivery_mode: deliveryMode,
+        options:
+          program === ProgramType.PROVER9
+            ? prover9OptionsForApi(mergedP9)
+            : mace4OptionsForApi(mergedM4),
       };
 
-      const response = await fetch(`${apiUrl}/save_input`, {
+      const path = program === ProgramType.PROVER9 ? '/prover9' : '/mace4';
+      const response = await fetch(`${apiUrl}${path}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(saveData),
+        body: JSON.stringify(body),
       });
 
       if (response.ok) {
-        alert('Input saved successfully');
+        const accepted = (await response.json()) as RunAccepted;
+        if (accepted.delivery_mode === 'stream' && accepted.stream_url) {
+          onStreamRunStarted?.({
+            runId: accepted.run_id,
+            program: accepted.program,
+            streamUrl: accepted.stream_url,
+          });
+        }
+        void refreshRuns?.();
       } else {
-        alert('Failed to save input');
+        let message = program === ProgramType.PROVER9 ? 'Failed to start Prover9' : 'Failed to start Mace4';
+        try {
+          const errorData = await response.json();
+          message =
+            (typeof errorData.detail === 'string' && errorData.detail) ||
+            errorData.detail?.[0]?.msg ||
+            errorData.error ||
+            message;
+        } catch {
+          /* use default */
+        }
+        setError(message);
       }
-    } catch (error) {
-      alert('Error saving input');
-      console.error(error);
+    } catch (err) {
+      setError(program === ProgramType.PROVER9 ? 'Error starting Prover9' : 'Error starting Mace4');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const runProver9 = () => launchProgram(ProgramType.PROVER9);
+  const runMace4 = () => launchProgram(ProgramType.MACE4);
+
+  /** Client-side save (no server route); downloads assumptions and goals as JSON. */
+  const saveInputLocal = () => {
+    const saveData = { assumptions, goals };
+    const blob = new Blob([JSON.stringify(saveData, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `prover9-gui-formulas-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
 
   const handleUpload = () => {
@@ -367,7 +387,7 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl, refreshRuns, onStreamRunSta
           </ButtonGroup>
         </Col>
         <Col md={6}>
-          <ButtonGroup>
+          <ButtonGroup className="flex-wrap align-items-center">
             <Form.Control
               type="text"
               placeholder="Process name"
@@ -375,7 +395,16 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl, refreshRuns, onStreamRunSta
               onChange={(e) => setProcessName(e.target.value)}
               style={{ width: '200px', marginRight: '10px' }}
             />
-            <Button variant="outline-primary" onClick={saveInput}>
+            <Form.Select
+              value={deliveryMode}
+              onChange={(e) => setDeliveryMode(e.target.value as DeliveryMode)}
+              style={{ width: 'auto', maxWidth: '140px', marginRight: '10px' }}
+              aria-label="Delivery mode"
+            >
+              <option value="persisted">Persisted</option>
+              <option value="stream">Stream</option>
+            </Form.Select>
+            <Button variant="outline-primary" onClick={saveInputLocal} title="Download assumptions and goals as JSON">
               💾 Save
             </Button>
             <Button variant="outline-primary" onClick={handleUpload}>
