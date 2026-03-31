@@ -13,7 +13,7 @@ todos:
     status: completed
   - id: process-list
     content: "ProcessList: run_id rows, lifecycle badges, cancel/delete endpoints; remove pause/resume"
-    status: pending
+    status: completed
   - id: process-details
     content: "ProcessDetails: artifacts + download; chain via process_output; fix prooftrans/interpformat/isofilter payloads"
     status: pending

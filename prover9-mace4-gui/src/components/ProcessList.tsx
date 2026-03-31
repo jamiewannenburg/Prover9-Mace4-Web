@@ -1,5 +1,6 @@
 import React from 'react';
 import { Table, Button, ButtonGroup, Badge } from 'react-bootstrap';
+import { cancelRun as cancelRunRequest, deleteRun as deleteRunRequest } from '../api/runs';
 import { RunSummary } from '../types';
 import { formatDuration } from '../utils';
 
@@ -19,41 +20,26 @@ const ProcessList: React.FC<ProcessListProps> = ({
   refreshRuns
 }) => {
   
-  const cancelRun = async (runId: string) => {
+  const handleCancelRun = async (runId: string) => {
     try {
-      const response = await fetch(`${apiUrl}/runs/${encodeURIComponent(runId)}/cancel`, {
-        method: 'POST',
-      });
-      
-      if (response.ok) {
-        void refreshRuns();
-      } else {
-        alert('Failed to cancel run');
-      }
+      await cancelRunRequest(apiUrl, runId);
+      void refreshRuns();
     } catch (error) {
       console.error('Error cancelling run:', error);
-      alert('Error cancelling run');
+      alert('Failed to cancel run');
     }
   };
-  
-  const removeRun = async (runId: string) => {
+
+  const handleDeleteRun = async (runId: string) => {
     try {
-      const response = await fetch(`${apiUrl}/runs/${encodeURIComponent(runId)}`, {
-        method: 'DELETE',
-      });
-      if (response.ok) {
-        if (selectedRunId === runId) {
-          onSelectRun(null);
-        }
-        void refreshRuns();
-      } else {
-        const msg = await response.json().catch(() => ({}));
-        console.error(apiUrl, msg);
-        alert('Failed to remove run');
+      await deleteRunRequest(apiUrl, runId);
+      if (selectedRunId === runId) {
+        onSelectRun(null);
       }
+      void refreshRuns();
     } catch (error) {
       console.error('Error removing run:', error);
-      alert('Error removing run');
+      alert('Failed to remove run');
     }
   };
 
@@ -118,8 +104,16 @@ const ProcessList: React.FC<ProcessListProps> = ({
                   <td>
                     {getStatusBadge(run.lifecycle)}
                     {run.source_run_id && (
-                      <span className="text-muted small ms-1" title={run.source_run_id}>
-                        (from {shortId(run.source_run_id)})
+                      <span
+                        className="text-muted small ms-1"
+                        title={
+                          run.source_artifact
+                            ? `${run.source_run_id} · ${run.source_artifact}`
+                            : run.source_run_id
+                        }
+                      >
+                        (from {shortId(run.source_run_id)}
+                        {run.source_artifact ? ` · ${run.source_artifact}` : ''})
                       </span>
                     )}
                   </td>
@@ -130,7 +124,7 @@ const ProcessList: React.FC<ProcessListProps> = ({
                         <Button 
                           key="cancel"
                           variant="danger" 
-                          onClick={(e) => { e.stopPropagation(); cancelRun(run.run_id); }}
+                          onClick={(e) => { e.stopPropagation(); void handleCancelRun(run.run_id); }}
                         >
                           Cancel
                         </Button>
@@ -138,7 +132,7 @@ const ProcessList: React.FC<ProcessListProps> = ({
                       <Button 
                         key="remove"
                         variant="secondary" 
-                        onClick={(e) => { e.stopPropagation(); removeRun(run.run_id); }}
+                        onClick={(e) => { e.stopPropagation(); void handleDeleteRun(run.run_id); }}
                       >
                         Remove
                       </Button>
