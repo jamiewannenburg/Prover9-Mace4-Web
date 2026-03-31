@@ -1,5 +1,48 @@
 
-Start the api using docker make the following `docker-compose.yml` file:
+The HTTP API is implemented with **FastAPI** and runs the LADR tools through **`pyp9m4`** (async facades and binary resolution), not the legacy subprocess/shelve `process_handler` flow.
+
+## HTTP API (summary)
+
+**Program runs** — each program has its own endpoint; the request body is `ProgramRunRequestV2` (`input`, optional `name`, optional `options`, `delivery_mode`):
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/prover9`, `/mace4`, `/prooftrans`, `/interpformat`, `/isofilter` | Start a run; returns `RunAccepted` (`run_id`, `program`, `delivery_mode`, `lifecycle`, `created_at`, optional `stream_url`) |
+| `GET` | `/runs` | List persisted runs |
+| `GET` | `/runs/{run_id}/status` | Run summary / lifecycle |
+| `GET` | `/runs/{run_id}/artifacts` | All artifacts (persisted mode) |
+| `GET` | `/runs/{run_id}/artifacts/{artifact}` | Single artifact |
+| `GET` | `/runs/{run_id}/download/{artifact}` | Download artifact as plain text |
+| `DELETE` | `/runs/{run_id}` | Remove run state |
+| `POST` | `/runs/{run_id}/cancel` | Cancel an active run |
+| `GET` | `/runs/{run_id}/stream` | SSE stream of run events (`stream` delivery mode) |
+
+**Helpers** (unchanged from the plan):
+
+| Method | Path |
+| --- | --- |
+| `POST` | `/parse` |
+| `POST` | `/generate_input` |
+
+**Removed (breaking):** generic `POST /start` and the old process-centric routes — see `API_GUI_MIGRATION.md` for old→new mapping and GUI changes.
+
+**Input:** `input` is a tagged union: `kind: "text"` (inline `text`), `kind: "file"` (`file_ref`), or `kind: "process_output"` (`run_id`, `artifact`) for chaining from a **completed persisted** run.
+
+**Delivery:** `delivery_mode` is `persisted` (artifacts and listing) or `stream` (live SSE; no durable artifact API).
+
+## Dependencies
+
+Install from the project directory:
+
+```
+pip install -r requirements.txt
+```
+
+Core runtime packages include FastAPI, uvicorn, pydantic, pyparsing, and **`pyp9m4`** (LADR tool integration). Ensure LADR binaries are on `PATH` (the Docker image installs them under `/app/bin`).
+
+## Docker
+
+Start the API using Docker; you can use a `docker-compose.yml` like:
 
 ```yaml
 services:
@@ -18,25 +61,24 @@ services:
     restart: unless-stopped
 ```
 
-Or to build locally clone the git directory:
+Or build locally from this directory:
 
 ```bash
 cd prover9-mace4-api
 docker compose up
 ```
 
-Or build locally:
+Or build the image manually:
 
 ```bash
 cd prover9-mace4-api
-# Build the image
 docker build -t prover9-mace4-web-api .
-
-# Run the container
 docker run -p 8000:8000 -d prover9-mace4-web-api
 ```
 
-To host your own:
+The Dockerfile downloads LADR binaries into `/app/bin` and sets `PATH` so `pyp9m4` can resolve `prover9`, `mace4`, etc.
+
+To host your own image:
 
 ```bash
 docker login
@@ -44,22 +86,22 @@ docker tag prover9-mace4-web-api yourusername/prover9-mace4-web-api:latest
 docker push yourusername/prover9-mace4-web-api:latest
 ```
 
-For example:
+Example:
+
 ```bash
 docker tag prover9-mace4-web-api jamiewannenburg/prover9-mace4-web-api:latest
 docker push jamiewannenburg/prover9-mace4-web-api:latest
 ```
 
-Or to run directly:
+## Run without Docker
 
-First download binaries from https://github.com/jamiewannenburg/ladr/releases or https://github.com/laitep/ladr/releases into the `bin` subdirectory (docker does this automatically).
+Download binaries from https://github.com/jamiewannenburg/ladr/releases or https://github.com/laitep/ladr/releases into the `bin` subdirectory (the Docker build does this automatically).
 
-1. Install the required dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
+1. Install dependencies: `pip install -r requirements.txt`
+2. Start the server: `python api_server.py`
 
-2. Run the api server:
-   ```
-   python api_server.py
-   ```
+For production-style bind:
+
+```
+python api_server.py --production --host 0.0.0.0 --port 8000
+```

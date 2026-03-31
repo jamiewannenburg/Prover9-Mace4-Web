@@ -49,7 +49,7 @@ RUN mkdir -p /app/bin && \
     mkdir -p /app/data && \
     chown -R apps:apps /app
 
-# Set environment variables
+# Runtime: Python API uses pyp9m4 against LADR binaries in /app/bin (on PATH).
 ENV PYTHONPATH=/app
 ENV PATH="/app/bin:${PATH}"
 
