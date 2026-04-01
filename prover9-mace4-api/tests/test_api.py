@@ -85,6 +85,7 @@ if "pyp9m4" not in sys.modules:
 
 from api_server import app, delivery_manager
 from p9m4_types import DeliveryMode
+from pyp9m4_runner import _mace4_stdout_from_models
 
 
 class TestApiContracts(unittest.TestCase):
@@ -186,6 +187,13 @@ class TestApiContracts(unittest.TestCase):
     def test_status_contract_for_unknown_run(self):
         status = self.client.get("/runs/does-not-exist/status")
         self.assertEqual(status.status_code, 404)
+
+    def test_mace4_stdout_from_models_joins_raw(self):
+        self.assertEqual(_mace4_stdout_from_models([]), "")
+        self.assertEqual(
+            _mace4_stdout_from_models([{"raw": "interp(1)"}, {"raw": "interp(2)"}]),
+            "interp(1)\n\ninterp(2)",
+        )
 
 
 if __name__ == "__main__":

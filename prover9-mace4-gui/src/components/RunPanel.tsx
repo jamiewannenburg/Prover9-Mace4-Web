@@ -241,15 +241,28 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl, refreshRuns, onStreamRunSta
   const runProver9 = () => launchProgram(ProgramType.PROVER9);
   const runMace4 = () => launchProgram(ProgramType.MACE4);
 
-  /** Client-side save (no server route); downloads assumptions and goals as JSON. */
-  const saveInputLocal = () => {
-    const saveData = { assumptions, goals };
-    const blob = new Blob([JSON.stringify(saveData, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `prover9-gui-formulas-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+  /** Save a standard Prover9/Mace4 input file (same text as used for runs). */
+  const saveInputLocal = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const text = await generateInput();
+      if (text == null || text === '') {
+        return;
+      }
+      const body = typeof text === 'string' ? text : String(text);
+      const base =
+        processName.trim().replace(/[<>:"/\\|?*]+/g, '_') || `prover9-input-${Date.now()}`;
+      const filename = base.toLowerCase().endsWith('.in') ? base : `${base}.in`;
+      const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUpload = () => {
@@ -404,7 +417,7 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl, refreshRuns, onStreamRunSta
               <option value="persisted">Persisted</option>
               <option value="stream">Stream</option>
             </Form.Select>
-            <Button variant="outline-primary" onClick={saveInputLocal} title="Download assumptions and goals as JSON">
+            <Button variant="outline-primary" onClick={() => void saveInputLocal()} title="Save as a Prover9/Mace4 input file (.in)">
               💾 Save
             </Button>
             <Button variant="outline-primary" onClick={handleUpload}>
@@ -417,6 +430,7 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl, refreshRuns, onStreamRunSta
               type="file"
               ref={fileInputRef}
               style={{ display: 'none' }}
+              accept=".in,.txt,text/plain"
               onChange={handleFileSelect}
             />
           </ButtonGroup>

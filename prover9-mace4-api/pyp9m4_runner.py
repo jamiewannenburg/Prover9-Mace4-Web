@@ -49,6 +49,19 @@ def _extract_option_value(options_dict: Dict[str, Any], key: str, default: Any =
     return field_value
 
 
+def _mace4_stdout_from_models(models: list[Any]) -> str:
+    """Primary text for artifacts: LADR interpretation lines (classic Mace4 print_models output)."""
+    parts: list[str] = []
+    for m in models:
+        if isinstance(m, dict):
+            raw = m.get("raw")
+            if raw is not None and str(raw).strip():
+                parts.append(str(raw).strip())
+        elif isinstance(m, str) and m.strip():
+            parts.append(m.strip())
+    return "\n\n".join(parts)
+
+
 class Pyp9m4Runner:
     """Service object that dispatches tool runs through async pyp9m4 APIs."""
 
@@ -169,11 +182,16 @@ class Pyp9m4Runner:
                 models.append(asdict(model) if is_dataclass(model) else str(model))
             await handle.wait()
             status = await handle.status()
+            # stderr_tail: search diagnostics (verbose/trace); keep as stderr like Prover9.
+            # Model interpretations live in `models` with `raw` — expose as stdout for download/save.
+            tail = status.stderr_tail or ""
+            text_out = _mace4_stdout_from_models(models)
             return {
                 "program": program.value,
                 "lifecycle": status.lifecycle,
                 "exit_code": status.exit_code,
-                "stderr": status.stderr_tail,
+                "stdout": text_out,
+                "stderr": tail,
                 "models_found": status.models_found,
                 "models": models,
             }
