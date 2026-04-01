@@ -3,11 +3,9 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import asdict, is_dataclass
 from inspect import signature
 from pathlib import Path
-import sys
 from typing import Any, Dict, Mapping, Optional, Union
 
 import pyp9m4 as _pyp9m4
@@ -200,39 +198,6 @@ class Pyp9m4Runner:
         options: LegacyOptions = None,
     ) -> Dict[str, Any]:
         mapped_options = self._map_options_for_program(program, options)
-        # On Windows, asyncio subprocess support depends on loop policy; use sync facade for Mace4.
-        if sys.platform.startswith("win") and program == ProgramType.MACE4:
-            def _run_mace4_sync() -> Dict[str, Any]:
-                facade = _pyp9m4.Mace4(
-                    options=mapped_options,
-                    cwd=self._cwd,
-                    env=self._env,
-                    encoding=self._encoding,
-                    errors=self._errors,
-                )
-                models: list[dict[str, Any]] = []
-                for mi in facade.models(input_data):
-                    model_entry: dict[str, Any] = {}
-                    raw = getattr(mi, "raw", None)
-                    if raw is not None:
-                        model_entry["raw"] = str(raw)
-                    domain_size = getattr(mi, "domain_size", None)
-                    if domain_size is not None:
-                        model_entry["domain_size"] = int(domain_size)
-                    if not model_entry:
-                        model_entry["raw"] = str(mi)
-                    models.append(model_entry)
-                return {
-                    "program": ProgramType.MACE4.value,
-                    "lifecycle": "completed",
-                    "stdout": _mace4_stdout_from_models(models),
-                    "stderr": "",
-                    "models": models,
-                    "models_found": len(models),
-                }
-
-            return await asyncio.to_thread(_run_mace4_sync)
-
         run_tool = _require_pyp9m4_api("arun", _ARUN)
         kwargs: Dict[str, Any] = {"options": mapped_options}
         # Support multiple pyp9m4 versions with different arun signatures.

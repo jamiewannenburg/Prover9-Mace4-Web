@@ -5,9 +5,7 @@ A FastAPI-based REST API for Prover9 and Mace4
 """
 
 import argparse
-import asyncio
 import os
-import sys
 from typing import Dict, List
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -197,10 +195,6 @@ async def list_samples() -> List[Dict]:
     return build_tree("samples")
 
 if __name__ == "__main__":
-    if sys.platform.startswith("win"):
-        # pyp9m4 async runner uses asyncio subprocess APIs which require Proactor on Windows.
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--host", type=str, default="localhost")
