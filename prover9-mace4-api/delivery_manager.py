@@ -6,8 +6,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import traceback
 import uuid
-from inspect import signature
+from inspect import isawaitable, signature
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -51,8 +52,8 @@ class DeliveryManager:
         self._runs: Dict[str, _RunRecord] = {}
         self._tasks: Dict[str, asyncio.Task[None]] = {}
         self._job_handles: Dict[str, Any] = {}
-        self._job_manager = getattr(_pyp9m4, "JobManager", None)
-        self._job_manager = self._job_manager() if callable(self._job_manager) else None
+        # Prefer direct async runner path; current JobManager adapter paths are inconsistent.
+        self._job_manager = None
         self._subscribers: Dict[str, List[asyncio.Queue[Optional[StreamEvent]]]] = {}
         self._lock = asyncio.Lock()
 
@@ -98,6 +99,12 @@ class DeliveryManager:
                 continue
             if value is None:
                 continue
+            if isawaitable(value):
+                # Some JobManager APIs expose async status methods; this sync poller skips them.
+                close = getattr(value, "close", None)
+                if callable(close):
+                    close()
+                continue
             if hasattr(value, "to_dict"):
                 return value.to_dict()
             if isinstance(value, dict):
@@ -117,6 +124,11 @@ class DeliveryManager:
             except Exception:
                 continue
             if value is None:
+                continue
+            if isawaitable(value):
+                close = getattr(value, "close", None)
+                if callable(close):
+                    close()
                 continue
             if hasattr(value, "to_dict"):
                 value = value.to_dict()
@@ -305,7 +317,12 @@ class DeliveryManager:
             record.lifecycle = "running"
             await self._publish_event(record, "started", {"name": record.name})
 
-            result = await self._run_via_job_manager(record, input_data, request.options)
+            # JobManager integration is optional; fall back to direct runner on any adapter failure.
+            result = None
+            try:
+                result = await self._run_via_job_manager(record, input_data, request.options)
+            except Exception:
+                result = None
             if result is None:
                 result = await self._runner.arun_program(record.program, input_data, options=request.options)
             if "stdout" in result and result["stdout"]:
@@ -332,7 +349,11 @@ class DeliveryManager:
         except Exception as exc:  # pylint: disable=broad-except
             record.lifecycle = "failed"
             record.completed_at = datetime.utcnow()
-            await self._publish_event(record, "error", str(exc))
+            detail = str(exc) or repr(exc)
+            tb = traceback.format_exc()
+            if tb:
+                detail = f"{detail}\n{tb}"
+            await self._publish_event(record, "error", detail)
         finally:
             for queue in self._subscribers.get(record.run_id, []):
                 await queue.put(None)

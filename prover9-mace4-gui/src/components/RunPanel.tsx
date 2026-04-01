@@ -30,6 +30,7 @@ function prover9OptionsForApi(o: Prover9Options): Record<string, string | number
 }
 
 function mace4OptionsForApi(o: Mace4Options): Record<string, string | number | boolean> {
+  const flagAsInt = (value: boolean): number => (value ? 1 : 0);
   return {
     start_size: o.start_size.value,
     end_size: o.end_size.value,
@@ -38,11 +39,14 @@ function mace4OptionsForApi(o: Mace4Options): Record<string, string | number | b
     max_seconds: o.max_seconds.value,
     max_seconds_per: o.max_seconds_per.value,
     max_megs: o.max_megs.value,
-    print_models: o.print_models.value,
-    print_models_tabular: o.print_models_tabular.value,
-    integer_ring: o.integer_ring.value,
-    verbose: o.verbose.value,
-    trace: o.trace.value,
+    // pyp9m4 expects Mace4 flag values as int (CLI style 0/1), not booleans.
+    print_models: flagAsInt(o.print_models.value),
+    print_models_tabular: flagAsInt(o.print_models_tabular.value),
+    integer_ring: flagAsInt(o.integer_ring.value),
+    order_domain: flagAsInt(o.order_domain.value),
+    arithmetic: flagAsInt(o.arithmetic.value),
+    verbose: flagAsInt(o.verbose.value),
+    trace: flagAsInt(o.trace.value),
   };
 }
 
