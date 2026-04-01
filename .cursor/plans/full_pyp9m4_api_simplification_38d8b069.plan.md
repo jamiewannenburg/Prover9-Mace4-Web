@@ -7,7 +7,7 @@ todos:
     status: completed
   - id: managed-job-integration
     content: Integrate JobManager snapshots/results in delivery_manager and remove ad-hoc task lifecycle assumptions
-    status: pending
+    status: in_progress
   - id: endpoint-contract-alignment
     content: Align api_server endpoints and p9m4_types models to managed orchestration semantics
     status: pending

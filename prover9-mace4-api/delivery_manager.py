@@ -7,12 +7,14 @@ import asyncio
 import json
 import os
 import uuid
+from inspect import signature
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Union
 
 from fastapi import HTTPException
+import pyp9m4 as _pyp9m4
 
 from p9m4_types import (
     DeliveryMode,
@@ -48,8 +50,108 @@ class DeliveryManager:
         self._runner = Pyp9m4Runner()
         self._runs: Dict[str, _RunRecord] = {}
         self._tasks: Dict[str, asyncio.Task[None]] = {}
+        self._job_handles: Dict[str, Any] = {}
+        self._job_manager = getattr(_pyp9m4, "JobManager", None)
+        self._job_manager = self._job_manager() if callable(self._job_manager) else None
         self._subscribers: Dict[str, List[asyncio.Queue[Optional[StreamEvent]]]] = {}
         self._lock = asyncio.Lock()
+
+    @staticmethod
+    def _normalize_lifecycle(raw: Any) -> str:
+        value = str(raw or "").strip().lower()
+        mapping = {
+            "queued": "queued",
+            "pending": "queued",
+            "created": "queued",
+            "running": "running",
+            "in_progress": "running",
+            "succeeded": "completed",
+            "success": "completed",
+            "completed": "completed",
+            "done": "completed",
+            "failed": "failed",
+            "error": "failed",
+            "timed_out": "failed",
+            "timeout": "failed",
+            "cancelled": "cancelled",
+            "canceled": "cancelled",
+        }
+        return mapping.get(value, "queued")
+
+    @staticmethod
+    def _call_with_matching_kwargs(func: Callable[..., Any], **kwargs: Any) -> Any:
+        params = signature(func).parameters
+        payload = {k: v for k, v in kwargs.items() if k in params}
+        return func(**payload)
+
+    def _read_snapshot(self, run_id: str) -> Optional[Dict[str, Any]]:
+        if self._job_manager is None:
+            return None
+        handle = self._job_handles.get(run_id, run_id)
+        for name in ("get_snapshot", "snapshot", "status", "get_status"):
+            method = getattr(self._job_manager, name, None)
+            if method is None:
+                continue
+            try:
+                value = self._call_with_matching_kwargs(method, run_id=run_id, job_id=run_id, handle=handle, job=handle)
+            except Exception:
+                continue
+            if value is None:
+                continue
+            if hasattr(value, "to_dict"):
+                return value.to_dict()
+            if isinstance(value, dict):
+                return value
+        return None
+
+    def _read_result(self, run_id: str) -> Optional[Dict[str, Any]]:
+        if self._job_manager is None:
+            return None
+        handle = self._job_handles.get(run_id, run_id)
+        for name in ("get_result", "result", "get_job_result"):
+            method = getattr(self._job_manager, name, None)
+            if method is None:
+                continue
+            try:
+                value = self._call_with_matching_kwargs(method, run_id=run_id, job_id=run_id, handle=handle, job=handle)
+            except Exception:
+                continue
+            if value is None:
+                continue
+            if hasattr(value, "to_dict"):
+                value = value.to_dict()
+            if isinstance(value, dict):
+                return value
+        return None
+
+    def _sync_record_from_snapshot(self, run: _RunRecord) -> None:
+        snap = self._read_snapshot(run.run_id)
+        if not snap:
+            return
+        raw_state = snap.get("status", snap.get("state", snap.get("lifecycle")))
+        lifecycle = self._normalize_lifecycle(raw_state)
+        run.lifecycle = lifecycle
+        if lifecycle in {"completed", "failed", "cancelled"} and run.completed_at is None:
+            run.completed_at = datetime.utcnow()
+        err = snap.get("error") or snap.get("detail") or snap.get("message")
+        if isinstance(err, str) and err:
+            run.error = err
+
+    def _sync_persisted_artifacts_from_result(self, run: _RunRecord) -> None:
+        if run.delivery_mode != DeliveryMode.PERSISTED:
+            return
+        result = self._read_result(run.run_id)
+        if not isinstance(result, dict):
+            return
+        run.artifacts["result"] = result
+        if "stdout" in result:
+            run.artifacts["stdout"] = result.get("stdout", "")
+        if "stderr" in result:
+            run.artifacts["stderr"] = result.get("stderr", "")
+        if "parsed" in result:
+            run.artifacts["parsed"] = result.get("parsed")
+        if "models" in result:
+            run.artifacts["models"] = result.get("models", [])
 
     async def create_run(self, program: ProgramType, request: ProgramRunRequestV2) -> RunAccepted:
         run_id = uuid.uuid4().hex
@@ -91,6 +193,8 @@ class DeliveryManager:
             source_run = self._runs.get(source.run_id)
             if source_run is None:
                 raise HTTPException(status_code=404, detail="source run not found")
+            self._sync_record_from_snapshot(source_run)
+            self._sync_persisted_artifacts_from_result(source_run)
             if source_run.delivery_mode != DeliveryMode.PERSISTED:
                 raise HTTPException(status_code=400, detail="source run must be persisted")
             if source_run.lifecycle != "completed":
@@ -140,13 +244,70 @@ class DeliveryManager:
         for queue in list(subscribers):
             await queue.put(payload)
 
+    async def _run_via_job_manager(
+        self,
+        record: _RunRecord,
+        input_data: Union[str, bytes],
+        options: Optional[Dict[str, Union[str, int, float, bool]]],
+    ) -> Optional[Dict[str, Any]]:
+        if self._job_manager is None:
+            return None
+
+        async def _exec() -> Dict[str, Any]:
+            return await self._runner.arun_program(record.program, input_data, options=options)
+
+        # Try common submit/start method names used by async job managers.
+        for method_name in ("submit", "create", "start", "enqueue"):
+            method = getattr(self._job_manager, method_name, None)
+            if method is None:
+                continue
+            try:
+                params = signature(method).parameters
+                kwargs: Dict[str, Any] = {}
+                if "run_id" in params:
+                    kwargs["run_id"] = record.run_id
+                if "job_id" in params:
+                    kwargs["job_id"] = record.run_id
+                if "name" in params:
+                    kwargs["name"] = record.name or record.run_id
+                if "coroutine" in params:
+                    kwargs["coroutine"] = _exec()
+                elif "coro" in params:
+                    kwargs["coro"] = _exec()
+                elif "task" in params:
+                    kwargs["task"] = _exec()
+                elif "fn" in params:
+                    kwargs["fn"] = _exec
+                elif "func" in params:
+                    kwargs["func"] = _exec
+                handle = self._call_with_matching_kwargs(
+                    method,
+                    **kwargs,
+                )
+                self._job_handles[record.run_id] = handle
+                break
+            except Exception:
+                continue
+        else:
+            return None
+
+        # Poll snapshots until terminal; then fetch result from manager.
+        while True:
+            self._sync_record_from_snapshot(record)
+            if record.lifecycle in {"completed", "failed", "cancelled"}:
+                break
+            await asyncio.sleep(0.05)
+        return self._read_result(record.run_id)
+
     async def _execute(self, record: _RunRecord, request: ProgramRunRequestV2) -> None:
         try:
             input_data = await self._resolve_input(request, record)
             record.lifecycle = "running"
             await self._publish_event(record, "started", {"name": record.name})
 
-            result = await self._runner.arun_program(record.program, input_data, options=request.options)
+            result = await self._run_via_job_manager(record, input_data, request.options)
+            if result is None:
+                result = await self._runner.arun_program(record.program, input_data, options=request.options)
             if "stdout" in result and result["stdout"]:
                 await self._publish_event(record, "stdout", result["stdout"])
             if "stderr" in result and result["stderr"]:
@@ -177,6 +338,7 @@ class DeliveryManager:
                 await queue.put(None)
 
     def _to_summary(self, run: _RunRecord) -> RunSummary:
+        self._sync_record_from_snapshot(run)
         return RunSummary(
             run_id=run.run_id,
             name=run.name,
@@ -204,6 +366,8 @@ class DeliveryManager:
 
     def get_artifact(self, run_id: str, artifact: str) -> Any:
         run = self.get_run(run_id)
+        self._sync_record_from_snapshot(run)
+        self._sync_persisted_artifacts_from_result(run)
         if run.delivery_mode != DeliveryMode.PERSISTED:
             raise HTTPException(status_code=400, detail="artifacts are available only for persisted runs")
         if artifact not in run.artifacts:
@@ -212,16 +376,40 @@ class DeliveryManager:
 
     def delete_run(self, run_id: str) -> Dict[str, str]:
         run = self.get_run(run_id)
+        self._sync_record_from_snapshot(run)
         task = self._tasks.get(run_id)
         if task and not task.done():
             task.cancel()
+        if self._job_manager is not None:
+            for name in ("cancel", "cancel_job", "delete", "remove"):
+                method = getattr(self._job_manager, name, None)
+                if method is None:
+                    continue
+                try:
+                    self._call_with_matching_kwargs(method, run_id=run_id, job_id=run_id, handle=self._job_handles.get(run_id))
+                    break
+                except Exception:
+                    continue
         self._runs.pop(run_id, None)
         self._tasks.pop(run_id, None)
+        self._job_handles.pop(run_id, None)
         self._subscribers.pop(run_id, None)
         return {"status": "success", "message": f"run {run_id} deleted ({run.program.value})"}
 
     def cancel_run(self, run_id: str) -> Dict[str, str]:
         run = self.get_run(run_id)
+        self._sync_record_from_snapshot(run)
+        if self._job_manager is not None:
+            for name in ("cancel", "cancel_job", "stop"):
+                method = getattr(self._job_manager, name, None)
+                if method is None:
+                    continue
+                try:
+                    self._call_with_matching_kwargs(method, run_id=run_id, job_id=run_id, handle=self._job_handles.get(run_id))
+                    run.lifecycle = "cancelled"
+                    return {"status": "success", "message": f"run {run_id} cancelled"}
+                except Exception:
+                    continue
         task = self._tasks.get(run_id)
         if task is None or task.done():
             raise HTTPException(status_code=400, detail="run is not active")
