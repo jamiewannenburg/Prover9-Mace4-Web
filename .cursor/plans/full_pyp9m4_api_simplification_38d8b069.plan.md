@@ -7,10 +7,10 @@ todos:
     status: completed
   - id: managed-job-integration
     content: Integrate JobManager snapshots/results in delivery_manager and remove ad-hoc task lifecycle assumptions
-    status: in_progress
+    status: completed
   - id: endpoint-contract-alignment
     content: Align api_server endpoints and p9m4_types models to managed orchestration semantics
-    status: pending
+    status: completed
   - id: dep-version-env-docs
     content: Pin minimum pyp9m4 version in requirements and document p9m4_gui conda upgrade path
     status: pending

@@ -20,6 +20,8 @@ from p9m4_types import (
     ProgramType,
     GuiOutput,
     RunAccepted,
+    RunActionResponse,
+    RunArtifact,
     RunArtifacts,
     RunSummary,
 )
@@ -101,9 +103,13 @@ async def get_run_artifacts(run_id: str) -> RunArtifacts:
 
 
 @app.get("/runs/{run_id}/artifacts/{artifact}")
-async def get_run_artifact(run_id: str, artifact: str):
+async def get_run_artifact(run_id: str, artifact: str) -> RunArtifact:
     """Return a single persisted artifact by stable key."""
-    return {"run_id": run_id, "artifact": artifact, "content": delivery_manager.get_artifact(run_id, artifact)}
+    return RunArtifact(
+        run_id=run_id,
+        artifact=artifact,
+        content=delivery_manager.get_artifact(run_id, artifact),
+    )
 
 
 @app.get("/runs/{run_id}/download/{artifact}")
@@ -122,15 +128,15 @@ async def download_run_artifact(run_id: str, artifact: str) -> PlainTextResponse
 
 
 @app.delete("/runs/{run_id}")
-async def delete_run(run_id: str) -> Dict[str, str]:
+async def delete_run(run_id: str) -> RunActionResponse:
     """Delete run and associated in-memory state."""
-    return delivery_manager.delete_run(run_id)
+    return RunActionResponse(**delivery_manager.delete_run(run_id))
 
 
 @app.post("/runs/{run_id}/cancel")
-async def cancel_run(run_id: str) -> Dict[str, str]:
+async def cancel_run(run_id: str) -> RunActionResponse:
     """Cancel an active run."""
-    return delivery_manager.cancel_run(run_id)
+    return RunActionResponse(**delivery_manager.cancel_run(run_id))
 
 
 @app.get("/runs/{run_id}/stream")

@@ -383,6 +383,17 @@ class DeliveryMode(str, Enum):
     STREAM = "stream"
 
 
+class RunLifecycle(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
+    # Backward-compatible alias retained during migration.
+    COMPLETED = "completed"
+
+
 class InputKind(str, Enum):
     TEXT = "text"
     FILE = "file"
@@ -419,7 +430,7 @@ class RunAccepted(BaseModel):
     run_id: str
     program: ProgramType
     delivery_mode: DeliveryMode
-    lifecycle: str
+    lifecycle: RunLifecycle
     created_at: datetime
     stream_url: Optional[str] = None
 
@@ -429,7 +440,7 @@ class RunSummary(BaseModel):
     name: Optional[str] = None
     program: ProgramType
     delivery_mode: DeliveryMode
-    lifecycle: str
+    lifecycle: RunLifecycle
     created_at: datetime
     completed_at: Optional[datetime] = None
     source_run_id: Optional[str] = None
@@ -438,6 +449,7 @@ class RunSummary(BaseModel):
 
 
 class RunArtifact(BaseModel):
+    run_id: str
     artifact: str
     content: Union[str, Dict, List]
 
@@ -451,6 +463,11 @@ class StreamEvent(BaseModel):
     event: str
     run_id: str
     program: ProgramType
-    lifecycle: Optional[str] = None
+    lifecycle: Optional[RunLifecycle] = None
     data: Optional[Union[str, Dict, List]] = None
     ts: datetime = Field(default_factory=datetime.utcnow)
+
+
+class RunActionResponse(BaseModel):
+    status: str
+    message: str
