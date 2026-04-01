@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
 
 function urlToPathname(input: RequestInfo | URL): string {
@@ -68,5 +68,25 @@ describe('App', () => {
     });
 
     expect(screen.getByPlaceholderText(/process name/i)).toBeInTheDocument();
+  });
+
+  test('polls GET /runs on interval after initial load', async () => {
+    jest.useFakeTimers();
+    try {
+      render(<App />);
+
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(3000);
+      });
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

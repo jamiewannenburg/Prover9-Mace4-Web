@@ -59,6 +59,15 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ runId, runs, apiUrl, re
   const outputRef = useRef<HTMLPreElement>(null);
   
   const selectedRun = runs.find((r) => r.run_id === runId);
+  const normalizeLifecycle = (lifecycle: string): string => lifecycle.trim().toLowerCase();
+  const isActiveLifecycle = (lifecycle: string): boolean =>
+    ['queued', 'running'].includes(normalizeLifecycle(lifecycle));
+  const formatLifecycleLabel = (lifecycle: string): string => {
+    const normalized = normalizeLifecycle(lifecycle);
+    if (normalized === 'succeeded') return 'completed';
+    if (normalized === 'timed_out') return 'timed out';
+    return normalized;
+  };
 
   const refreshArtifactKeys = useCallback(async () => {
     if (!runId) return;
@@ -117,7 +126,7 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ runId, runs, apiUrl, re
   }, [runId, selectedArtifact, selectedRun?.run_id, fetchOutput]);
 
   useEffect(() => {
-    if (!runId || !selectedRun || selectedRun.lifecycle !== 'running') {
+    if (!runId || !selectedRun || !isActiveLifecycle(selectedRun.lifecycle)) {
       return;
     }
     const t = window.setInterval(() => {
@@ -213,8 +222,8 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ runId, runs, apiUrl, re
     return (
       <Card>
         <Card.Body>
-          <Card.Title>Process Details</Card.Title>
-          <p>Select a process to view details</p>
+          <Card.Title>Run Details</Card.Title>
+          <p>Select a run to view details</p>
         </Card.Body>
       </Card>
     );
@@ -227,7 +236,7 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ runId, runs, apiUrl, re
     const info = [
       `Name: ${run.name || 'Unnamed'}`,
       `Program: ${run.program}`,
-      `Status: ${run.lifecycle}`,
+      `Status: ${formatLifecycleLabel(run.lifecycle)}`,
       `Delivery: ${run.delivery_mode}`,
       `Duration: ${formatDuration(duration)}`
     ];
@@ -247,7 +256,7 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ runId, runs, apiUrl, re
   return (
     <Card>
       <Card.Body>
-        <Card.Title>Process Details</Card.Title>
+        <Card.Title>Run Details</Card.Title>
         <pre className="process-info">{formatRunInfo(selectedRun)}</pre>
         
         <hr />

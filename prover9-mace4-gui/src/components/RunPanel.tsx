@@ -20,6 +20,7 @@ import { useLanguageOptions } from '../context/LanguageOptionsContext';
 import { useAdditionalOptions } from '../context/AdditionalOptionsContext';
 import { DEFAULT_OPTIONS as PROVER9_DEFAULT_OPTIONS } from './Prover9OptionsPanel';
 import { DEFAULT_OPTIONS as MACE4_DEFAULT_OPTIONS } from './Mace4OptionsPanel';
+import { launchMace4, launchProver9 } from '../api/runs';
 
 /** Flat primitives for `ProgramRunRequestV2.options` (API accepts JSON scalars; runner uses `_extract_option_value`). */
 function prover9OptionsForApi(o: Prover9Options): Record<string, string | number | boolean> {
@@ -197,17 +198,11 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl, refreshRuns, onStreamRunSta
             : mace4OptionsForApi(mergedM4),
       };
 
-      const path = program === ProgramType.PROVER9 ? '/prover9' : '/mace4';
-      const response = await fetch(`${apiUrl}${path}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (response.ok) {
-        const accepted = (await response.json()) as RunAccepted;
+      try {
+        const accepted: RunAccepted =
+          program === ProgramType.PROVER9
+            ? await launchProver9(apiUrl, body)
+            : await launchMace4(apiUrl, body);
         if (accepted.delivery_mode === 'stream' && accepted.stream_url) {
           onStreamRunStarted?.({
             runId: accepted.run_id,
@@ -216,18 +211,12 @@ const RunPanel: React.FC<RunPanelProps> = ({ apiUrl, refreshRuns, onStreamRunSta
           });
         }
         void refreshRuns?.();
-      } else {
-        let message = program === ProgramType.PROVER9 ? 'Failed to start Prover9' : 'Failed to start Mace4';
-        try {
-          const errorData = await response.json();
-          message =
-            (typeof errorData.detail === 'string' && errorData.detail) ||
-            errorData.detail?.[0]?.msg ||
-            errorData.error ||
-            message;
-        } catch {
-          /* use default */
-        }
+      } catch (launchError) {
+        const defaultMessage =
+          program === ProgramType.PROVER9 ? 'Failed to start Prover9' : 'Failed to start Mace4';
+        const message = launchError instanceof Error && launchError.message
+          ? launchError.message
+          : defaultMessage;
         setError(message);
       }
     } catch (err) {

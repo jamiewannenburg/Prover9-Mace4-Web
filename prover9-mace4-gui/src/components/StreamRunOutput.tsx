@@ -12,6 +12,16 @@ function formatModelData(data: unknown): string {
   }
 }
 
+function normalizeLifecycle(lifecycle: string): string {
+  return lifecycle.trim().toLowerCase();
+}
+
+function isTerminalLifecycle(lifecycle: string): boolean {
+  return ['completed', 'succeeded', 'failed', 'cancelled', 'timed_out'].includes(
+    normalizeLifecycle(lifecycle)
+  );
+}
+
 export interface StreamRunOutputProps {
   apiUrl: string;
   runId: string;
@@ -68,6 +78,9 @@ const StreamRunOutput: React.FC<StreamRunOutputProps> = ({
 
     const onStdout = (ev: MessageEvent) => {
       const p = parsePayload(ev);
+      if (p?.lifecycle && isTerminalLifecycle(p.lifecycle)) {
+        markFinished();
+      }
       if (p?.data != null && typeof p.data === 'string') {
         setStdout((s) => s + p.data);
       }
@@ -75,6 +88,9 @@ const StreamRunOutput: React.FC<StreamRunOutputProps> = ({
 
     const onStderr = (ev: MessageEvent) => {
       const p = parsePayload(ev);
+      if (p?.lifecycle && isTerminalLifecycle(p.lifecycle)) {
+        markFinished();
+      }
       if (p?.data != null && typeof p.data === 'string') {
         setStderr((s) => s + p.data);
       }
@@ -82,12 +98,20 @@ const StreamRunOutput: React.FC<StreamRunOutputProps> = ({
 
     const onModel = (ev: MessageEvent) => {
       const p = parsePayload(ev);
+      if (p?.lifecycle && isTerminalLifecycle(p.lifecycle)) {
+        markFinished();
+      }
       if (p?.data !== undefined && p.data !== null) {
         setModels((prev) => [...prev, formatModelData(p.data)]);
       }
     };
 
     const onCompleted = (_ev: MessageEvent) => {
+      markFinished();
+      es.close();
+    };
+
+    const onTerminalAlias = (_ev: MessageEvent) => {
       markFinished();
       es.close();
     };
@@ -122,6 +146,10 @@ const StreamRunOutput: React.FC<StreamRunOutputProps> = ({
     es.addEventListener('stderr', onStderr);
     es.addEventListener('model', onModel);
     es.addEventListener('completed', onCompleted);
+    es.addEventListener('succeeded', onTerminalAlias);
+    es.addEventListener('failed', onTerminalAlias);
+    es.addEventListener('cancelled', onTerminalAlias);
+    es.addEventListener('timed_out', onTerminalAlias);
     es.addEventListener('error', onNamedError);
     es.addEventListener('end', onEnd);
 
@@ -138,6 +166,10 @@ const StreamRunOutput: React.FC<StreamRunOutputProps> = ({
       es.removeEventListener('stderr', onStderr);
       es.removeEventListener('model', onModel);
       es.removeEventListener('completed', onCompleted);
+      es.removeEventListener('succeeded', onTerminalAlias);
+      es.removeEventListener('failed', onTerminalAlias);
+      es.removeEventListener('cancelled', onTerminalAlias);
+      es.removeEventListener('timed_out', onTerminalAlias);
       es.removeEventListener('error', onNamedError);
       es.removeEventListener('end', onEnd);
       es.onerror = null;

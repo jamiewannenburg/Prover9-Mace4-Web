@@ -12,6 +12,7 @@ import ProcessList from './components/ProcessList';
 import ProcessDetails from './components/ProcessDetails';
 import ApiConfig from './components/ApiConfig';
 import { ActiveStreamRun, RunSummary } from './types';
+import { listRuns } from './api/runs';
 import { FormulaProvider } from './context/FormulaContext';
 import { Mace4OptionsProvider } from './context/Mace4OptionsContext';
 import { Prover9OptionsProvider } from './context/Prover9OptionsContext';
@@ -111,31 +112,12 @@ function App() {
   }, []);
 
   const refreshRuns = useCallback(async () => {
-    const listUrl = `${apiUrl}/runs`;
     try {
-      const response = await fetch(listUrl);
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error:', {
-          status: response.status,
-          statusText: response.statusText,
-          body: errorText
-        });
-        setError(`Failed to fetch runs: ${response.status} ${response.statusText}`);
-        return;
-      }
-
-      const data = await response.json();
-      if (!Array.isArray(data)) {
-        console.error('Invalid response format:', data);
-        setError('Invalid response format from API');
-        return;
-      }
-
-      setRuns(data as RunSummary[]);
+      const data = await listRuns(apiUrl);
+      setRuns(data);
     } catch (err) {
       console.error('API Error:', {
-        url: listUrl,
+        url: `${apiUrl}/runs`,
         error: err instanceof Error ? err.message : String(err)
       });
       setError('API server not available');

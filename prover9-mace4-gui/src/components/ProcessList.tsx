@@ -19,6 +19,11 @@ const ProcessList: React.FC<ProcessListProps> = ({
   apiUrl,
   refreshRuns
 }) => {
+  const normalizeLifecycle = (lifecycle: string): string => lifecycle.trim().toLowerCase();
+  const isTerminalLifecycle = (lifecycle: string): boolean =>
+    ['completed', 'succeeded', 'failed', 'cancelled', 'timed_out'].includes(normalizeLifecycle(lifecycle));
+  const canCancelRun = (lifecycle: string): boolean =>
+    ['queued', 'running'].includes(normalizeLifecycle(lifecycle));
   
   const handleCancelRun = async (runId: string) => {
     try {
@@ -44,17 +49,21 @@ const ProcessList: React.FC<ProcessListProps> = ({
   };
 
   const getStatusBadge = (lifecycle: string) => {
-    switch (lifecycle) {
+    const normalized = normalizeLifecycle(lifecycle);
+    switch (normalized) {
+      case 'queued':
+        return <Badge key="queued" bg="info">Queued</Badge>;
       case 'running':
         return <Badge key="running" bg="success">Running</Badge>;
       case 'completed':
+      case 'succeeded':
         return <Badge key="completed" bg="primary">Completed</Badge>;
+      case 'timed_out':
+        return <Badge key="timed_out" bg="warning">Timed Out</Badge>;
       case 'failed':
         return <Badge key="failed" bg="danger">Failed</Badge>;
       case 'cancelled':
-        return <Badge key="cancelled" bg="warning">Cancelled</Badge>;
-      case 'queued':
-        return <Badge key="queued" bg="info">Queued</Badge>;
+        return <Badge key="cancelled" bg="secondary">Cancelled</Badge>;
       default:
         return <Badge key={lifecycle} bg="secondary">{lifecycle}</Badge>;
     }
@@ -71,7 +80,7 @@ const ProcessList: React.FC<ProcessListProps> = ({
 
   return (
     <div className="process-list">
-      <h3>Process List</h3>
+      <h3>Run List</h3>
       <Table striped bordered hover>
         <thead>
           <tr>
@@ -86,7 +95,7 @@ const ProcessList: React.FC<ProcessListProps> = ({
         </thead>
         <tbody>
           {runs.length === 0 ? (
-            <tr key="processempty-state">
+            <tr key="run-empty-state">
               <td colSpan={7} className="text-center">No runs</td>
             </tr>
           ) : (
@@ -120,7 +129,7 @@ const ProcessList: React.FC<ProcessListProps> = ({
                   <td>{calculateDuration(run.created_at)}</td>
                   <td>
                     <ButtonGroup size="sm">
-                      {run.lifecycle === 'running' && (
+                      {canCancelRun(run.lifecycle) && (
                         <Button 
                           key="cancel"
                           variant="danger" 
@@ -132,6 +141,7 @@ const ProcessList: React.FC<ProcessListProps> = ({
                       <Button 
                         key="remove"
                         variant="secondary" 
+                        disabled={!isTerminalLifecycle(run.lifecycle)}
                         onClick={(e) => { e.stopPropagation(); void handleDeleteRun(run.run_id); }}
                       >
                         Remove

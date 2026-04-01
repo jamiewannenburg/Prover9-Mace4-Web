@@ -1,17 +1,7 @@
-export enum ProcessState {
-  READY = "ready",
-  RUNNING = "running",
-  SUSPENDED = "suspended",
-  DONE = "done",
-  ERROR = "error",
-  KILLED = "killed"
-}
-
 export enum ProgramType {
   PROVER9 = "prover9",
   MACE4 = "mace4",
   ISOFILTER = "isofilter",
-  ISOFILTER2 = "isofilter2",
   INTERPFORMAT = "interpformat",
   PROOFTRANS = "prooftrans"
 }
@@ -121,44 +111,6 @@ export enum SymbolType {
   ORDINARY = "ordinary"
 }
 
-export interface ProcessOutput {
-  output: string;
-  total_lines: number;
-  page: number;
-  page_size: number;
-  has_more: boolean;
-}
-
-/** Legacy process row from the pre-run API; prefer {@link RunSummary} for new code. */
-export interface Process {
-  id: number;
-  program: ProgramType;
-  state: ProcessState;
-  start_time: string;
-  name?: string;
-  input?: string | number;
-  error?: string;
-  exit_code?: number;
-  stats?: string;
-  // {
-  //   given?: number;
-  //   generated?: number;
-  //   kept?: number;
-  //   proofs?: number;
-  //   cpu_time?: number;
-  //   domain_size?: number;
-  //   models?: number;
-  //   input_models?: number;
-  //   kept_models?: number;
-  //   removed_models?: number;
-  // };
-  resource_usage?: {
-    cpu_percent?: number;
-    memory_percent?: number;
-  };
-  options?: Record<string, any>;
-}
-
 export interface Flag {
   name: string;
   value: boolean;
@@ -259,12 +211,6 @@ export interface SampleTreeProps {
   nodes: SampleNode[];
   onSelectFile: (path: string) => void;
   level?: number;
-}
-
-export interface ProgramInput {
-  program: ProgramType;
-  input: string;
-  options?: Record<string, any>;
 }
 
 /** API v2: persisted vs stream delivery (matches `DeliveryMode` in p9m4_types.py). */
