@@ -7,7 +7,7 @@ This document maps the current generic API/models to the new per-program request
 | Current endpoint | Current contract | New endpoint/contract |
 | --- | --- | --- |
 | `POST /start` | `ProgramInput` (`program`, `input`, `name`, `options`) -> `{ process_id }` | Replaced by program-specific endpoints: `POST /prover9`, `POST /mace4`, `POST /prooftrans`, `POST /interpformat`, `POST /isofilter` with typed per-program request models and typed run-accepted response |
-| `GET /status/{process_id}` | `ProcessInfo` | Persisted mode: `GET /runs/{run_id}/status` with shared run lifecycle schema; stream mode: status implied through stream events |
+| `GET /status/{process_id}` | `ProcessInfo` | Persisted/stream mode: `GET /runs/{run_id}/status` with run lifecycle schema (`queued`, `running`, `completed`, `failed`, `cancelled`) |
 | `GET /processes` | `List[int]` | Persisted mode: `GET /runs` returning list of typed run summaries (not bare IDs) |
 | `GET /output/{process_id}` | `ProcessOutput` (`output`, pagination metadata) | Persisted mode: `GET /runs/{run_id}/artifacts/{artifact}` or `GET /runs/{run_id}/output`; stream mode: `stdout`/`stderr`/`model` events over SSE |
 | `GET /download/{process_id}` | `StreamingResponse` plain-text file | Persisted mode: `GET /runs/{run_id}/download/{artifact}` |
@@ -102,7 +102,7 @@ The response is mode-dependent:
 
 Replace `ProcessInfo` with API-facing models:
 - `RunSummary` (list/status-safe metadata)
-- `RunLifecycle` (queued/running/completed/failed/cancelled)
+- `RunLifecycle` (`queued`, `running`, `completed`, `failed`, `cancelled`)
 - `RunOutcome` (exit status, typed program result, diagnostics)
 - `RunArtifacts` (stable artifact keys for chaining/downstream retrieval)
 - `StreamEvent` union for SSE (`started`, `stdout`, `stderr`, `model`, `completed`, `error`)
@@ -124,8 +124,10 @@ Do not expose server file paths or OS process IDs in public contracts.
 
 - Breaking: remove generic `POST /start` in favor of per-program endpoints.
 - Breaking: remove integer-based implicit chaining (`input: int`) and require explicit `process_output` references.
+- Breaking: `process_output` chaining now requires source runs to be both `persisted` and `completed`.
 - Breaking: replace untyped `options: Dict` with typed, program-specific options.
 - Breaking: process lifecycle APIs move from `process_id` and file-backed outputs to `run_id` and artifact-based retrieval/streaming.
+- Breaking: artifact endpoints are unavailable for `stream` runs (`400`).
 
 ## Frontend migration checklist by file
 

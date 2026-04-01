@@ -13,10 +13,10 @@ todos:
     status: completed
   - id: dep-version-env-docs
     content: Pin minimum pyp9m4 version in requirements and document p9m4_gui conda upgrade path
-    status: pending
+    status: completed
   - id: tests-and-migration-docs
     content: Update test_api plus API docs/migration notes to match new behavior
-    status: pending
+    status: completed
 isProject: false
 ---
 

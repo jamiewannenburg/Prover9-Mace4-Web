@@ -28,7 +28,9 @@ The HTTP API is implemented with **FastAPI** and runs the LADR tools through **`
 
 **Input:** `input` is a tagged union: `kind: "text"` (inline `text`), `kind: "file"` (`file_ref`), or `kind: "process_output"` (`run_id`, `artifact`) for chaining from a **completed persisted** run.
 
-**Delivery:** `delivery_mode` is `persisted` (artifacts and listing) or `stream` (live SSE; no durable artifact API).
+**Lifecycle contract:** run status is reported as `queued`, `running`, `completed`, `failed`, or `cancelled` on `GET /runs/{run_id}/status`.
+
+**Delivery:** `delivery_mode` is `persisted` (artifacts and listing) or `stream` (live SSE; no durable artifact API; artifact endpoints return `400` for stream runs).
 
 ## Dependencies
 
@@ -39,6 +41,17 @@ pip install -r requirements.txt
 ```
 
 Core runtime packages include FastAPI, uvicorn, pydantic, pyparsing, and **`pyp9m4`** (LADR tool integration). Ensure LADR binaries are on `PATH` (the Docker image installs them under `/app/bin`).
+
+### `p9m4_gui` conda environment upgrade path
+
+When running this API alongside the GUI conda environment, upgrade `pyp9m4` in `p9m4_gui` first, verify the installed version, then reinstall backend deps:
+
+```bash
+conda activate p9m4_gui
+python -m pip install --upgrade "pyp9m4>=0.5.0"
+python -c "import pyp9m4; print(getattr(pyp9m4, '__version__', 'unknown'))"
+python -m pip install -r requirements.txt
+```
 
 ## Docker
 

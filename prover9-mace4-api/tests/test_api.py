@@ -93,6 +93,7 @@ class TestApiContracts(unittest.TestCase):
         self.client = TestClient(app)
         delivery_manager._runs.clear()
         delivery_manager._tasks.clear()
+        delivery_manager._job_handles.clear()
         delivery_manager._subscribers.clear()
 
     def tearDown(self):
@@ -183,6 +184,95 @@ class TestApiContracts(unittest.TestCase):
 
         artifacts = self.client.get(f"/runs/{run_id}/artifacts")
         self.assertEqual(artifacts.status_code, 400)
+
+    def test_failure_status_propagates_error_details(self):
+        with patch.object(
+            delivery_manager._runner,
+            "arun_program",
+            new=AsyncMock(side_effect=RuntimeError("backend failed")),
+        ):
+            response = self.client.post("/prover9", json={"input": self._text_input(), "delivery_mode": "persisted"})
+            self.assertEqual(response.status_code, 200)
+            run_id = response.json()["run_id"]
+            done_status = self._wait_for_completion(run_id)
+
+        self.assertEqual(done_status["lifecycle"], "failed")
+        self.assertIn("backend failed", done_status.get("error", ""))
+
+    def test_cancel_contract_for_completed_run_returns_400(self):
+        with patch.object(delivery_manager, "_job_manager", new=None), patch.object(
+            delivery_manager._runner,
+            "arun_program",
+            new=AsyncMock(return_value={"stdout": "done", "stderr": ""}),
+        ):
+            response = self.client.post("/mace4", json={"input": self._text_input(), "delivery_mode": "persisted"})
+            self.assertEqual(response.status_code, 200)
+            run_id = response.json()["run_id"]
+            self._wait_for_completion(run_id)
+
+            cancel = self.client.post(f"/runs/{run_id}/cancel")
+            self.assertEqual(cancel.status_code, 400)
+            self.assertEqual(cancel.json()["detail"], "run is not active")
+
+    def test_process_output_chaining_requires_completed_persisted_source(self):
+        source_payload = {"stdout": "A -> B.", "stderr": "", "parsed": {"proofs": 1}, "models": []}
+
+        with patch.object(delivery_manager._runner, "arun_program", new=AsyncMock(return_value=source_payload)):
+            source_response = self.client.post(
+                "/prover9",
+                json={"input": self._text_input(), "delivery_mode": "persisted"},
+            )
+            self.assertEqual(source_response.status_code, 200)
+            source_run_id = source_response.json()["run_id"]
+            self._wait_for_completion(source_run_id)
+
+        with patch.object(
+            delivery_manager._runner,
+            "arun_program",
+            new=AsyncMock(return_value={"stdout": "ok", "stderr": "", "parsed": {}, "models": []}),
+        ) as patched:
+            chained = self.client.post(
+                "/prooftrans",
+                json={
+                    "delivery_mode": "persisted",
+                    "input": {
+                        "kind": "process_output",
+                        "run_id": source_run_id,
+                        "artifact": "stdout",
+                    },
+                },
+            )
+            self.assertEqual(chained.status_code, 200)
+            chained_run_id = chained.json()["run_id"]
+            self._wait_for_completion(chained_run_id)
+
+            _, call_args, call_kwargs = patched.mock_calls[-1]
+            self.assertEqual(call_args[0].value, "prooftrans")
+            self.assertEqual(call_args[1], "A -> B.")
+            self.assertEqual(call_kwargs["options"], None)
+
+        bad_stream_source = self.client.post(
+            "/mace4",
+            json={"input": self._text_input(), "delivery_mode": "stream"},
+        )
+        self.assertEqual(bad_stream_source.status_code, 200)
+        stream_run_id = bad_stream_source.json()["run_id"]
+
+        rejected = self.client.post(
+            "/prooftrans",
+            json={
+                "delivery_mode": "persisted",
+                "input": {
+                    "kind": "process_output",
+                    "run_id": stream_run_id,
+                    "artifact": "stdout",
+                },
+            },
+        )
+        self.assertEqual(rejected.status_code, 200)
+        rejected_status = self._wait_for_completion(rejected.json()["run_id"])
+        self.assertEqual(rejected_status["lifecycle"], "failed")
+        self.assertIn("source run must be persisted", rejected_status.get("error", ""))
 
     def test_status_contract_for_unknown_run(self):
         status = self.client.get("/runs/does-not-exist/status")
