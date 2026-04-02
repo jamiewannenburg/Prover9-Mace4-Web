@@ -58,16 +58,9 @@ def _mace4_stdout_from_models(models: list[Any]) -> str:
             if raw is not None:
                 chunk = str(raw).strip()
                 if chunk:
-                    # LADR term readers (e.g., isofilter) expect each interpretation term to be
-                    # terminated. Some pyp9m4 parser paths omit the trailing '.', so add it.
-                    if not chunk.rstrip().endswith("."):
-                        chunk = chunk.rstrip() + "."
                     parts.append(chunk)
         elif isinstance(m, str) and m.strip():
-            chunk = m.strip()
-            if not chunk.rstrip().endswith("."):
-                chunk = chunk.rstrip() + "."
-            parts.append(chunk)
+            parts.append(m.strip())
     return "\n\n".join(parts)
 
 
