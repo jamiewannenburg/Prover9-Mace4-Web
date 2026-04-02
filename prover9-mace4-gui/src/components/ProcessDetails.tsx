@@ -179,11 +179,15 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ runId, runs, apiUrl, re
     if (!runId) return;
 
     try {
+      // Mace4 `stdout` is raw tool output (may include headers/separators).
+      // For downstream LADR term readers (interpformat/isofilter), use the structured
+      // model text artifact when available.
+      const artifactForInput = artifactKeys.includes('models_text') ? 'models_text' : selectedArtifact;
       await launchInterpformat(apiUrl, {
         input: {
           kind: 'process_output',
           run_id: runId,
-          artifact: selectedArtifact,
+          artifact: artifactForInput,
         },
         options: { format: selectedFormat },
         delivery_mode: 'persisted',
@@ -199,11 +203,12 @@ const ProcessDetails: React.FC<ProcessDetailsProps> = ({ runId, runs, apiUrl, re
     if (!runId) return;
 
     try {
+      const artifactForInput = artifactKeys.includes('models_text') ? 'models_text' : selectedArtifact;
       await launchIsofilter(apiUrl, {
         input: {
           kind: 'process_output',
           run_id: runId,
-          artifact: selectedArtifact,
+          artifact: artifactForInput,
         },
         options: {
           wrap: isofilterOptions.wrap,

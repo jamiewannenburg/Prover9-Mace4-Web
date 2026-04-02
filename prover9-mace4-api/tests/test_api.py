@@ -84,8 +84,8 @@ if "pyp9m4" not in sys.modules:
     sys.modules["pyp9m4.options"] = options_mod
 
 from api_server import app, delivery_manager
-from p9m4_types import DeliveryMode
-from pyp9m4_runner import _mace4_stdout_from_models
+from p9m4_types import DeliveryMode, ProgramType
+from pyp9m4_runner import Pyp9m4Runner, _mace4_stdout_from_models
 
 
 class TestApiContracts(unittest.TestCase):
@@ -284,6 +284,16 @@ class TestApiContracts(unittest.TestCase):
             _mace4_stdout_from_models([{"raw": "interp(1)"}, {"raw": "interp(2)"}]),
             "interp(1)\n\ninterp(2)",
         )
+
+    def test_mace4_legacy_payload_empty_stdout_uses_models_text(self):
+        """Mimics pyp9m4.arun('mace4') envelope without raw subprocess capture."""
+        payload = Pyp9m4Runner._to_legacy_payload(
+            ProgramType.MACE4,
+            {"program": "mace4", "mace4_models": [{"raw": "interp(1)"}]},
+        )
+        self.assertEqual(payload.get("stdout"), "")
+        self.assertEqual(payload.get("stderr"), "")
+        self.assertEqual(payload.get("models_text"), "interp(1)")
 
 
 if __name__ == "__main__":

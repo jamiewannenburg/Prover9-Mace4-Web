@@ -42,6 +42,8 @@ pip install -r requirements.txt
 
 Core runtime packages include FastAPI, uvicorn, pydantic, pyparsing, and **`pyp9m4`** (LADR tool integration). Ensure LADR binaries are on `PATH` (the Docker image installs them under `/app/bin`).
 
+**Mace4 vs Prover9 output:** `pyp9m4.arun("mace4")` does not attach subprocess `stdout`/`stderr` to the envelope (unlike Prover9). This API exposes **`stdout` / `stderr`** when present, plus **`models`** and **`models_text`** for interpretation text. See [`docs/pyp9m4_mace4_stdout_issue.md`](docs/pyp9m4_mace4_stdout_issue.md).
+
 ### `p9m4_gui` conda environment upgrade path
 
 When running this API alongside the GUI conda environment, upgrade `pyp9m4` in `p9m4_gui` first, verify the installed version, then reinstall backend deps:

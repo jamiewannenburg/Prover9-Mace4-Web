@@ -164,6 +164,8 @@ class DeliveryManager:
             run.artifacts["parsed"] = result.get("parsed")
         if "models" in result:
             run.artifacts["models"] = result.get("models", [])
+        if "models_text" in result:
+            run.artifacts["models_text"] = result.get("models_text", "")
 
     async def create_run(self, program: ProgramType, request: ProgramRunRequestV2) -> RunAccepted:
         run_id = uuid.uuid4().hex
@@ -251,6 +253,8 @@ class DeliveryManager:
                         record.artifacts["parsed"] = data.get("parsed")
                     if "models" in data:
                         record.artifacts["models"] = data.get("models", [])
+                    if "models_text" in data:
+                        record.artifacts["models_text"] = data.get("models_text", "")
 
         subscribers = self._subscribers.get(record.run_id, [])
         for queue in list(subscribers):

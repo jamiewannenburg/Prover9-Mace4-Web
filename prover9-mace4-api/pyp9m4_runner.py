@@ -55,10 +55,19 @@ def _mace4_stdout_from_models(models: list[Any]) -> str:
     for m in models:
         if isinstance(m, dict):
             raw = m.get("raw")
-            if raw is not None and str(raw).strip():
-                parts.append(str(raw).strip())
+            if raw is not None:
+                chunk = str(raw).strip()
+                if chunk:
+                    # LADR term readers (e.g., isofilter) expect each interpretation term to be
+                    # terminated. Some pyp9m4 parser paths omit the trailing '.', so add it.
+                    if not chunk.rstrip().endswith("."):
+                        chunk = chunk.rstrip() + "."
+                    parts.append(chunk)
         elif isinstance(m, str) and m.strip():
-            parts.append(m.strip())
+            chunk = m.strip()
+            if not chunk.rstrip().endswith("."):
+                chunk = chunk.rstrip() + "."
+            parts.append(chunk)
     return "\n\n".join(parts)
 
 
@@ -170,12 +179,16 @@ class Pyp9m4Runner:
             return payload
 
         if program == ProgramType.MACE4:
+            # pyp9m4.arun("mace4") returns ToolRunEnvelope with raw=None (no subprocess capture in the envelope).
+            # Do not substitute model text for stdout; keep raw stdout/stderr from envelope["raw"] when present.
             models = envelope_dict.get("mace4_models", [])
+            list_models = models if isinstance(models, list) else []
             payload["lifecycle"] = payload.get("lifecycle", "completed")
-            payload["stdout"] = _mace4_stdout_from_models(models if isinstance(models, list) else [])
-            payload["stderr"] = payload.get("stderr", "")
-            payload["models"] = models if isinstance(models, list) else []
-            payload["models_found"] = len(payload["models"])
+            payload.setdefault("stdout", "")
+            payload.setdefault("stderr", "")
+            payload["models"] = list_models
+            payload["models_found"] = len(list_models)
+            payload["models_text"] = _mace4_stdout_from_models(list_models)
             return payload
 
         if program in (ProgramType.ISOFILTER, ProgramType.ISOFILTER2, ProgramType.INTERPFORMAT, ProgramType.PROOFTRANS):
